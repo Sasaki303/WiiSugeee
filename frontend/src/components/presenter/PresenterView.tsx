@@ -3,9 +3,86 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loadFromLocalStorage, type SerializedFlow } from "@/lib/presentation";
+import { getAssetBlob } from "@/lib/idbAssets";
 import { useWiiController, type WiiState } from "@/hooks/useWiiController";
 
 type Mode = "idle" | "playing";
+
+function PdfSlide(props: {
+	assetId: string;
+	page: number;
+	fallbackDataUrl?: string;
+	alt: string;
+	getOrLoadPdfDocument: (assetId: string) => Promise<any>;
+}) {
+	const { assetId, page, fallbackDataUrl, alt, getOrLoadPdfDocument } = props;
+	const wrapperRef = useRef<HTMLDivElement | null>(null);
+	const canvasRef = useRef<HTMLCanvasElement | null>(null);
+	const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+	const [renderError, setRenderError] = useState<string | null>(null);
+
+	useEffect(() => {
+		const el = wrapperRef.current;
+		if (!el) return;
+		const update = () => {
+			const rect = el.getBoundingClientRect();
+			setSize({ w: Math.max(0, rect.width), h: Math.max(0, rect.height) });
+		};
+		update();
+		const ro = new ResizeObserver(() => update());
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, []);
+
+	useEffect(() => {
+		let cancelled = false;
+		(async () => {
+			setRenderError(null);
+			const el = wrapperRef.current;
+			const canvas = canvasRef.current;
+			if (!el || !canvas || !size || size.w === 0 || size.h === 0) return;
+
+			const pdf = await getOrLoadPdfDocument(assetId);
+			if (cancelled) return;
+			const pdfPage = await pdf.getPage(page);
+			if (cancelled) return;
+
+			const viewport1 = pdfPage.getViewport({ scale: 1 });
+			const scale = Math.min(size.w / viewport1.width, size.h / viewport1.height);
+			const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+			const renderViewport = pdfPage.getViewport({ scale: scale * dpr });
+
+			canvas.width = Math.floor(renderViewport.width);
+			canvas.height = Math.floor(renderViewport.height);
+			canvas.style.width = `${Math.floor(renderViewport.width / dpr)}px`;
+			canvas.style.height = `${Math.floor(renderViewport.height / dpr)}px`;
+
+			const ctx = canvas.getContext("2d");
+			if (!ctx) return;
+			ctx.setTransform(1, 0, 0, 1, 0, 0);
+			ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+			await pdfPage.render({ canvasContext: ctx, canvas, viewport: renderViewport }).promise;
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [assetId, getOrLoadPdfDocument, page, size]);
+
+	return (
+		<div ref={wrapperRef} style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+			{renderError && fallbackDataUrl ? (
+				<img
+					src={fallbackDataUrl}
+					style={{ width: "100%", height: "100%", objectFit: "contain" }}
+					alt={alt}
+				/>
+			) : (
+				<canvas ref={canvasRef} aria-label={alt} />
+			)}
+		</div>
+	);
+}
 
 // IRカメラの座標(0-1023)を画面座標に変換する関数
 function mapIrToScreen(irX: number, irY: number, screenW: number, screenH: number) {
@@ -39,6 +116,32 @@ export function PresenterView() {
 	const [flow, setFlow] = useState<SerializedFlow | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
+	const pdfDocCacheRef = useRef<Map<string, Promise<any>>>(new Map());
+
+	const getOrLoadPdfDocument = useCallback(async (assetId: string) => {
+		const cached = pdfDocCacheRef.current.get(assetId);
+		if (cached) return await cached;
+
+		const promise = (async () => {
+			const blob = await getAssetBlob(assetId);
+			if (!blob) throw new Error("PDFアセットが見つかりません (IndexedDB)");
+			const arrayBuffer = await blob.arrayBuffer();
+			const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+			pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+				"pdfjs-dist/legacy/build/pdf.worker.min.mjs",
+				import.meta.url,
+			).toString();
+			return await pdfjs.getDocument({ data: arrayBuffer }).promise;
+		})();
+
+		pdfDocCacheRef.current.set(assetId, promise);
+		try {
+			return await promise;
+		} catch (e) {
+			pdfDocCacheRef.current.delete(assetId);
+			throw e;
+		}
+	}, []);
 
 	// お絵描き用の座標リスト
 	const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]);
@@ -246,11 +349,13 @@ export function PresenterView() {
 			<div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
 				{currentNode ? (
 					<>
-						{currentNode.data.asset?.kind === "pdf" && currentNode.data.asset.thumbnailDataUrl ? (
-							<img
-								src={currentNode.data.asset.thumbnailDataUrl}
-								style={{ width: "100%", height: "100%", objectFit: "contain" }}
+						{currentNode.data.asset?.kind === "pdf" ? (
+							<PdfSlide
+								assetId={currentNode.data.asset.assetId}
+								page={currentNode.data.asset.page ?? 1}
+								fallbackDataUrl={currentNode.data.asset.thumbnailDataUrl}
 								alt={currentNode.data.label}
+								getOrLoadPdfDocument={getOrLoadPdfDocument}
 							/>
 						) : currentNode.data.asset?.kind === "video" ? (
 							<div style={{ color: "white", textAlign: "center" }}>
