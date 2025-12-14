@@ -7,6 +7,7 @@ import ReactFlow, {
 	Controls,
 	MiniMap,
 	ReactFlowProvider,
+	PanOnScrollMode,
 	addEdge,
 	useEdgesState,
 	useNodesState,
@@ -86,6 +87,50 @@ async function pdfToThumbnails(file: File): Promise<Array<{ page: number; dataUr
 	}
 
 	return results;
+}
+
+async function videoToThumbnailDataUrl(file: File): Promise<string | undefined> {
+	const url = URL.createObjectURL(file);
+	try {
+		const video = document.createElement("video");
+		video.src = url;
+		video.muted = true;
+		video.playsInline = true;
+		video.preload = "metadata";
+
+		await new Promise<void>((resolve, reject) => {
+			video.onloadedmetadata = () => resolve();
+			video.onerror = () => reject(new Error("動画の読み込みに失敗しました"));
+		});
+
+		const duration = Number.isFinite(video.duration) ? video.duration : 0;
+		const targetTime = duration > 0 ? Math.min(0.1, Math.max(0, duration - 0.01)) : 0;
+		if (targetTime > 0) {
+			video.currentTime = targetTime;
+			await new Promise<void>((resolve, reject) => {
+				video.onseeked = () => resolve();
+				video.onerror = () => reject(new Error("動画のシークに失敗しました"));
+			});
+		}
+
+		const vw = video.videoWidth;
+		const vh = video.videoHeight;
+		if (!vw || !vh) return undefined;
+
+		const targetWidth = 240;
+		const scale = targetWidth / vw;
+		const canvas = document.createElement("canvas");
+		canvas.width = targetWidth;
+		canvas.height = Math.max(1, Math.floor(vh * scale));
+		const ctx = canvas.getContext("2d");
+		if (!ctx) return undefined;
+		ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+		// エディタ表示用なので低画質でOK
+		return canvas.toDataURL("image/jpeg", 0.5);
+	} finally {
+		URL.revokeObjectURL(url);
+	}
 }
 
 function flowFromState(nodes: Node<SlideNodeData>[], edges: Edge[], assets: ProjectAsset[]): SerializedFlow {
@@ -340,13 +385,20 @@ function InnerEditor() {
 						const assetId = nanoid();
 						await putAssetBlob(assetId, file);
 						newlyAddedAssets.push(createAssetMeta("video", name, assetId));
+
+						let thumbnailDataUrl: string | undefined;
+						try {
+							thumbnailDataUrl = await videoToThumbnailDataUrl(file);
+						} catch {
+							thumbnailDataUrl = undefined;
+						}
 						newlyAddedNodes.push({
 							id: nanoid(),
 							type: "slide",
 							position: { x: baseX, y: rowY },
 							data: {
 								label: `VIDEO: ${name}`,
-								asset: { kind: "video", assetId, fileName: name },
+								asset: { kind: "video", assetId, fileName: name, thumbnailDataUrl },
 							},
 						});
 						rowY += 220;
@@ -556,6 +608,11 @@ function InnerEditor() {
 						onConnect={onConnect}
 						onSelectionChange={onSelectionChange}
 						nodeTypes={nodeTypes}
+						panOnScroll
+						panOnScrollMode={PanOnScrollMode.Free}
+						zoomOnScroll={false}
+						selectionOnDrag
+						panOnDrag={[1, 2]}
 						fitView
 					>
 						<Background />

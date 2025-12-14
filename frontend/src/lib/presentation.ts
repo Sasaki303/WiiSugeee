@@ -17,6 +17,7 @@ export type AssetRef =
 			kind: "video";
 			assetId: string;
 			fileName: string;
+			thumbnailDataUrl?: string;
 	  };
 
 export type SlideNodeData = {

@@ -5,7 +5,7 @@ import type { SlideNodeData } from "@/lib/presentation";
 
 export function SlideNode(props: NodeProps<SlideNodeData>) {
 	const { data, selected } = props;
-	const isPdfPage = data.asset?.kind === "pdf";
+	const isConnectableMedia = data.asset?.kind === "pdf" || data.asset?.kind === "video";
 	return (
 		<div
 			style={{
@@ -17,7 +17,7 @@ export function SlideNode(props: NodeProps<SlideNodeData>) {
 				background: selected ? "#fafafa" : "white",
 			}}
 		>
-			{isPdfPage ? (
+			{isConnectableMedia ? (
 				<>
 					<Handle
 						type="target"
@@ -47,6 +47,12 @@ export function SlideNode(props: NodeProps<SlideNodeData>) {
 			) : null}
 			<div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{data.label}</div>
 			{data.asset?.kind === "pdf" && data.asset.thumbnailDataUrl ? (
+				<img
+					alt={data.label}
+					src={data.asset.thumbnailDataUrl}
+					style={{ width: "100%", height: 160, objectFit: "cover", borderRadius: 6 }}
+				/>
+			) : data.asset?.kind === "video" && data.asset.thumbnailDataUrl ? (
 				<img
 					alt={data.label}
 					src={data.asset.thumbnailDataUrl}
