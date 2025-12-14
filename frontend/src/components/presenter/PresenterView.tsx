@@ -84,6 +84,54 @@ function PdfSlide(props: {
 	);
 }
 
+function VideoSlide(props: { assetId: string; alt: string }) {
+	const { assetId, alt } = props;
+	const [src, setSrc] = useState<string | null>(null);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		let active = true;
+		let url: string | null = null;
+		(async () => {
+			try {
+				setError(null);
+				setSrc(null);
+				const blob = await getAssetBlob(assetId);
+				if (!blob) throw new Error("動画アセットが見つかりません (IndexedDB)");
+				url = URL.createObjectURL(blob);
+				if (!active) return;
+				setSrc(url);
+			} catch (e) {
+				if (!active) return;
+				setError(e instanceof Error ? e.message : String(e));
+			}
+		})();
+		return () => {
+			active = false;
+			if (url) URL.revokeObjectURL(url);
+		};
+	}, [assetId]);
+
+	if (error) {
+		return <div style={{ color: "white", textAlign: "center" }}>動画の読み込みに失敗しました: {error}</div>;
+	}
+	if (!src) {
+		return <div style={{ color: "white", textAlign: "center" }}>動画を読み込み中...</div>;
+	}
+
+	return (
+		<video
+			src={src}
+			style={{ width: "100%", height: "100%", objectFit: "contain" }}
+			controls
+			autoPlay
+			muted
+			playsInline
+			aria-label={alt}
+		/>
+	);
+}
+
 // IRカメラの座標(0-1023)を画面座標に変換する関数
 function mapIrToScreen(irX: number, irY: number, screenW: number, screenH: number) {
 	// WiiリモコンのIRは視点が逆になることがあるため、必要に応じて 1 - ... を調整してください
@@ -358,10 +406,7 @@ export function PresenterView() {
 								getOrLoadPdfDocument={getOrLoadPdfDocument}
 							/>
 						) : currentNode.data.asset?.kind === "video" ? (
-							<div style={{ color: "white", textAlign: "center" }}>
-								<div style={{ fontSize: 32, marginBottom: 16 }}>🎥 {currentNode.data.asset.fileName}</div>
-								<div style={{ fontSize: 16, opacity: 0.7 }}>動画ノード (再生機能未実装)</div>
-							</div>
+							<VideoSlide assetId={currentNode.data.asset.assetId} alt={currentNode.data.label} />
 						) : (
 							<h1 style={{ fontSize: 80, color: "white", textAlign: "center", maxWidth: "80%" }}>
 								{currentNode.data.label}
