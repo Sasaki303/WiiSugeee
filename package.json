@@ -1,0 +1,16 @@
+{
+  "name": "wiisugeee",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "next": "^16.0.10",
+    "node-hid": "^2.2.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "ws": "^8.18.3"
+  }
+}
