@@ -23,24 +23,24 @@ export function SlideNode(props: NodeProps<SlideNodeData>) {
 						type="target"
 						position={Position.Left}
 						style={{
-							width: 14,
-							height: 14,
+							width: 28,
+							height: 28,
 							borderRadius: 999,
 							background: "#fff",
 							border: "2px solid #666",
-							left: -10,
+							left: -18,
 						}}
 					/>
 					<Handle
 						type="source"
 						position={Position.Right}
 						style={{
-							width: 14,
-							height: 14,
+							width: 28,
+							height: 28,
 							borderRadius: 999,
 							background: "#fff",
 							border: "2px solid #666",
-							right: -10,
+							right: -18,
 						}}
 					/>
 				</>
