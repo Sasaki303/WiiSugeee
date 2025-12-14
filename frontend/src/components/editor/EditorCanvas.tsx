@@ -287,8 +287,12 @@ function InnerEditor() {
 			setIsImporting(true);
 			try {
 				const baseX = 80;
-				let y = 80;
+				const xStep = 320;
+				const maxExistingY = nodes.reduce((acc, n) => Math.max(acc, n.position.y), 0);
+				let rowY = nodes.length > 0 ? maxExistingY + 220 : 80;
 				const newlyAddedAssets: ProjectAsset[] = [];
+				const newlyAddedNodes: Node<SlideNodeData>[] = [];
+				const newlyAddedEdges: Edge[] = [];
 
 				for (const file of fileArray) {
 					const name = file.name;
@@ -299,28 +303,36 @@ function InnerEditor() {
 						newlyAddedAssets.push(createAssetMeta("pdf", name, assetId));
 
 						const thumbs = await pdfToThumbnails(file);
-						setNodes((prev) => {
-							const next = [...prev];
-							for (const thumb of thumbs) {
-								next.push({
-									id: nanoid(),
-									type: "slide",
-									position: { x: baseX, y },
-									data: {
-										label: `PDF: ${name} / p${thumb.page}`,
-										asset: {
-											kind: "pdf",
-											assetId,
-											fileName: name,
-											page: thumb.page,
-											thumbnailDataUrl: thumb.dataUrl,
-										},
+						const pdfNodes: Node<SlideNodeData>[] = thumbs.map((thumb, index) => {
+							const nodeId = nanoid();
+							return {
+								id: nodeId,
+								type: "slide",
+								position: { x: baseX + index * xStep, y: rowY },
+								data: {
+									label: `PDF: ${name} / p${thumb.page}`,
+									asset: {
+										kind: "pdf",
+										assetId,
+										fileName: name,
+										page: thumb.page,
+										thumbnailDataUrl: thumb.dataUrl,
 									},
-								});
-								y += 220;
-							}
-							return next;
+								},
+							};
 						});
+
+						for (let i = 0; i < pdfNodes.length - 1; i++) {
+							newlyAddedEdges.push({
+								id: nanoid(),
+								source: pdfNodes[i].id,
+								target: pdfNodes[i + 1].id,
+								label: "",
+							});
+						}
+
+						newlyAddedNodes.push(...pdfNodes);
+						rowY += 220;
 						continue;
 					}
 
@@ -328,22 +340,25 @@ function InnerEditor() {
 						const assetId = nanoid();
 						await putAssetBlob(assetId, file);
 						newlyAddedAssets.push(createAssetMeta("video", name, assetId));
-
-						setNodes((prev) => [
-							...prev,
-							{
-								id: nanoid(),
-								type: "slide",
-								position: { x: baseX, y },
-								data: {
-									label: `VIDEO: ${name}`,
-									asset: { kind: "video", assetId, fileName: name },
-								},
+						newlyAddedNodes.push({
+							id: nanoid(),
+							type: "slide",
+							position: { x: baseX, y: rowY },
+							data: {
+								label: `VIDEO: ${name}`,
+								asset: { kind: "video", assetId, fileName: name },
 							},
-						]);
-						y += 220;
+						});
+						rowY += 220;
 						continue;
 					}
+				}
+
+				if (newlyAddedNodes.length > 0) {
+					setNodes((prev) => [...prev, ...newlyAddedNodes]);
+				}
+				if (newlyAddedEdges.length > 0) {
+					setEdges((prev) => [...prev, ...newlyAddedEdges]);
 				}
 
 				if (newlyAddedAssets.length > 0) {
@@ -353,7 +368,7 @@ function InnerEditor() {
 				setIsImporting(false);
 			}
 		},
-		[setNodes],
+		[nodes, setEdges, setNodes],
 	);
 
 	const onDrop = useCallback(
