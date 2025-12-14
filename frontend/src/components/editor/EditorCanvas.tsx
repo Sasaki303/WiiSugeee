@@ -133,6 +133,37 @@ async function videoToThumbnailDataUrl(file: File): Promise<string | undefined> 
 	}
 }
 
+async function imageToThumbnailDataUrl(file: File): Promise<string | undefined> {
+	const url = URL.createObjectURL(file);
+	try {
+		const img = document.createElement("img");
+		img.decoding = "async";
+		img.src = url;
+		await new Promise<void>((resolve, reject) => {
+			img.onload = () => resolve();
+			img.onerror = () => reject(new Error("画像の読み込みに失敗しました"));
+		});
+
+		const iw = img.naturalWidth;
+		const ih = img.naturalHeight;
+		if (!iw || !ih) return undefined;
+
+		const targetWidth = 240;
+		const scale = targetWidth / iw;
+		const canvas = document.createElement("canvas");
+		canvas.width = targetWidth;
+		canvas.height = Math.max(1, Math.floor(ih * scale));
+		const ctx = canvas.getContext("2d");
+		if (!ctx) return undefined;
+		ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+		// エディタ表示用なので低画質でOK
+		return canvas.toDataURL("image/jpeg", 0.6);
+	} finally {
+		URL.revokeObjectURL(url);
+	}
+}
+
 function flowFromState(nodes: Node<SlideNodeData>[], edges: Edge[], assets: ProjectAsset[]): SerializedFlow {
 	return {
 		version: 1,
@@ -381,6 +412,31 @@ function InnerEditor() {
 						continue;
 					}
 
+					if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+						const assetId = nanoid();
+						await putAssetBlob(assetId, file);
+						newlyAddedAssets.push(createAssetMeta("image", name, assetId));
+
+						let thumbnailDataUrl: string | undefined;
+						try {
+							thumbnailDataUrl = await imageToThumbnailDataUrl(file);
+						} catch {
+							thumbnailDataUrl = undefined;
+						}
+
+						newlyAddedNodes.push({
+							id: nanoid(),
+							type: "slide",
+							position: { x: baseX, y: rowY },
+							data: {
+								label: `IMG: ${name}`,
+								asset: { kind: "image", assetId, fileName: name, thumbnailDataUrl },
+							},
+						});
+						rowY += 220;
+						continue;
+					}
+
 					if (lower.endsWith(".mp4")) {
 						const assetId = nanoid();
 						await putAssetBlob(assetId, file);
@@ -492,7 +548,7 @@ function InnerEditor() {
 	const onImportClick = useCallback(async () => {
 		const input = document.createElement("input");
 		input.type = "file";
-		input.accept = ".pdf,.mp4";
+		input.accept = ".pdf,.mp4,.png,.jpg,.jpeg";
 		input.multiple = true;
 		input.onchange = async () => {
 			if (!input.files?.length) return;
@@ -522,6 +578,21 @@ function InnerEditor() {
 		router.push("/present?auto=1&from=editor");
 	}, [router]);
 
+	const iconStyle: React.CSSProperties = {
+		width: 16,
+		height: 16,
+		display: "inline-block",
+		flex: "0 0 auto",
+	};
+
+	const buttonStyle: React.CSSProperties = {
+		display: "inline-flex",
+		alignItems: "center",
+		gap: 6,
+		height: 32,
+		padding: "0 10px",
+	};
+
 	return (
 		<div
 			ref={wrapperRef}
@@ -538,17 +609,48 @@ function InnerEditor() {
 					alignItems: "center",
 				}}
 			>
-				<button onClick={onHomeClick}>ホームに戻る</button>
-				<button onClick={goPresent}>再生</button>
-				<button onClick={onImportClick} disabled={isImporting}>
-					{isImporting ? "取込中..." : "PDF/MP4 取込 (D&D可)"}
+				<button onClick={onHomeClick} style={buttonStyle} aria-label="ホームに戻る">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={iconStyle}>
+						<path d="M3 10.5L12 3l9 7.5" />
+						<path d="M5 10v10h14V10" />
+					</svg>
+					ホーム
 				</button>
-				<button onClick={addSlideNode}>ノード追加</button>
-				<button onClick={deleteSelected} disabled={selectedNodeIds.length + selectedEdgeIds.length === 0}>
+				<button onClick={goPresent} style={buttonStyle} aria-label="再生">
+					<svg viewBox="0 0 24 24" fill="currentColor" style={iconStyle}>
+						<path d="M8 5v14l11-7z" />
+					</svg>
+					再生
+				</button>
+				<button onClick={onImportClick} disabled={isImporting} style={buttonStyle} aria-label="素材取り込み">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={iconStyle}>
+						<path d="M12 21V9" />
+						<path d="M7 14l5-5 5 5" />
+						<path d="M5 3h14v6H5z" />
+					</svg>
+					{isImporting ? "取込中..." : "素材取り込み (D&D可)"}
+				</button>
+				<button
+					onClick={deleteSelected}
+					disabled={selectedNodeIds.length + selectedEdgeIds.length === 0}
+					style={buttonStyle}
+					aria-label="選択削除"
+				>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={iconStyle}>
+						<path d="M3 6h18" />
+						<path d="M8 6V4h8v2" />
+						<path d="M6 6l1 16h10l1-16" />
+					</svg>
 					選択削除
 				</button>
-				<button onClick={onSaveProject}>プロジェクト保存</button>
-				<button onClick={onLoadProject}>プロジェクト読み込み</button>
+				<button onClick={onSaveProject} style={buttonStyle} aria-label="プロジェクト保存">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={iconStyle}>
+						<path d="M12 3v12" />
+						<path d="M7 10l5 5 5-5" />
+						<path d="M5 21h14" />
+					</svg>
+					保存
+				</button>
 				{isDirty ? (
 					<div style={{ fontSize: 12, color: "#b45309" }}>未保存</div>
 				) : (
@@ -608,6 +710,7 @@ function InnerEditor() {
 						onConnect={onConnect}
 						onSelectionChange={onSelectionChange}
 						nodeTypes={nodeTypes}
+						minZoom={0.05}
 						panOnScroll
 						panOnScrollMode={PanOnScrollMode.Free}
 						zoomOnScroll={false}

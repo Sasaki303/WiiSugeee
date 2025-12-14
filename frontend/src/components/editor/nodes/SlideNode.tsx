@@ -5,7 +5,8 @@ import type { SlideNodeData } from "@/lib/presentation";
 
 export function SlideNode(props: NodeProps<SlideNodeData>) {
 	const { data, selected } = props;
-	const isConnectableMedia = data.asset?.kind === "pdf" || data.asset?.kind === "video";
+	const isConnectableMedia =
+		data.asset?.kind === "pdf" || data.asset?.kind === "video" || data.asset?.kind === "image";
 	return (
 		<div
 			style={{
@@ -58,6 +59,27 @@ export function SlideNode(props: NodeProps<SlideNodeData>) {
 					src={data.asset.thumbnailDataUrl}
 					style={{ width: "100%", height: 160, objectFit: "cover", borderRadius: 6 }}
 				/>
+			) : data.asset?.kind === "image" && data.asset.thumbnailDataUrl ? (
+				<img
+					alt={data.label}
+					src={data.asset.thumbnailDataUrl}
+					style={{ width: "100%", height: 160, objectFit: "cover", borderRadius: 6 }}
+				/>
+			) : data.asset?.kind === "image" ? (
+				<div
+					style={{
+						width: "100%",
+						height: 160,
+						borderRadius: 6,
+						background: "#f5f5f5",
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						fontSize: 12,
+					}}
+				>
+					画像: {data.asset.fileName}
+				</div>
 			) : data.asset?.kind === "video" ? (
 				<div
 					style={{
