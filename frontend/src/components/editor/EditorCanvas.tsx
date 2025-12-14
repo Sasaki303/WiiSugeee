@@ -18,15 +18,38 @@ import ReactFlow, {
 import { nanoid } from "nanoid";
 import { SlideNode } from "@/components/editor/nodes/SlideNode";
 import {
+	clearEditorStorage,
+	getLastSavedHash,
 	loadFromLocalStorage,
 	saveToLocalStorage,
+	setLastSavedHash,
 	type ProjectAsset,
 	type SerializedFlow,
 	type SlideNodeData,
 } from "@/lib/presentation";
-import { putAssetBlob } from "@/lib/idbAssets";
+import { clearAllAssetBlobs, putAssetBlob } from "@/lib/idbAssets";
 import { saveProjectAsZip, loadProjectFromZip, loadProjectFromZipFile } from "@/lib/projectArchive";
 import { createAssetMeta } from "@/lib/projectFolder";
+
+function hashString(input: string): string {
+	// djb2
+	let hash = 5381;
+	for (let i = 0; i < input.length; i++) {
+		hash = (hash * 33) ^ input.charCodeAt(i);
+	}
+	return (hash >>> 0).toString(16);
+}
+
+function computeFlowHash(flow: SerializedFlow): string {
+	// viewport は保存対象外なので hash から除外
+	const minimal = {
+		version: flow.version,
+		assets: flow.assets ?? [],
+		nodes: flow.nodes,
+		edges: flow.edges,
+	};
+	return hashString(JSON.stringify(minimal));
+}
 
 async function pdfToThumbnails(file: File): Promise<Array<{ page: number; dataUrl?: string }>> {
 	const arrayBuffer = await file.arrayBuffer();
@@ -106,16 +129,46 @@ function InnerEditor() {
 	const [nodes, setNodes, onNodesChange] = useNodesState<SlideNodeData>([]);
 	const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 	const [assets, setAssets] = useState<ProjectAsset[]>([]);
+	const [isHydrated, setIsHydrated] = useState(false);
 	const [isImporting, setIsImporting] = useState(false);
 	const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
 	const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
+	const [showLeaveWarning, setShowLeaveWarning] = useState(false);
+	const [lastSavedHash, setLastSavedHashState] = useState<string | null>(null);
+	const initialHashRef = useRef<string | null>(null);
 
 	const nodeTypes = useMemo(() => ({ slide: SlideNode }), []);
 
 	useEffect(() => {
+		setLastSavedHashState(getLastSavedHash());
+
 		const saved = loadFromLocalStorage();
 		if (!saved) {
-			// ... (初期化ロジックはそのまま) ...
+			setAssets([]);
+			setNodes([
+				{
+					id: nanoid(),
+					type: "slide",
+					position: { x: 80, y: 80 },
+					data: { label: "Start" },
+				},
+			]);
+			setEdges([]);
+			initialHashRef.current = computeFlowHash(
+				flowFromState(
+					[
+						{
+							id: "__start__",
+							type: "slide",
+							position: { x: 80, y: 80 },
+							data: { label: "Start" },
+						},
+					],
+					[],
+					[],
+				),
+			);
+			setIsHydrated(true);
 			return;
 		}
 		setAssets(saved.assets ?? []);
@@ -127,9 +180,24 @@ function InnerEditor() {
 		if (saved.viewport) {
 			setViewport(saved.viewport);
 		}
+		initialHashRef.current = computeFlowHash(saved);
+		setIsHydrated(true);
 	}, [setEdges, setNodes, setViewport]); // <--- 依存配列に setViewport を追加
 
+	const currentFlowHash = useMemo(() => {
+		const flow = flowFromState(nodes, edges, assets);
+		return computeFlowHash(flow);
+	}, [assets, edges, nodes]);
+
+	const isDirty = useMemo(() => {
+		if (!isHydrated) return false;
+		if (lastSavedHash) return currentFlowHash !== lastSavedHash;
+		if (!initialHashRef.current) return false;
+		return currentFlowHash !== initialHashRef.current;
+	}, [currentFlowHash, isHydrated, lastSavedHash]);
+
 	useEffect(() => {
+		if (!isHydrated) return;
 		const flow = flowFromState(nodes, edges, assets);
 		const currentViewport = getViewport();
 
@@ -137,7 +205,7 @@ function InnerEditor() {
 			...flow,
 			viewport: currentViewport,
 		});
-	}, [nodes, edges, assets, getViewport]); // <--- 依存配列に getViewport を追加
+	}, [nodes, edges, assets, getViewport, isHydrated]); // <--- 依存配列に getViewport を追加
 
 	const onConnect = useCallback(
 		(connection: Connection) => {
@@ -300,6 +368,10 @@ function InnerEditor() {
 				if (file && file.name.toLowerCase().endsWith(".zip")) {
 					try {
 						const loaded = await loadProjectFromZipFile(file);
+						const loadedHash = computeFlowHash(loaded);
+						setLastSavedHash(loadedHash);
+						setLastSavedHashState(loadedHash);
+						initialHashRef.current = loadedHash;
 						setAssets(loaded.assets ?? []);
 						const { nodes: restoredNodes, edges: restoredEdges } = stateFromFlow(loaded);
 						setNodes(restoredNodes);
@@ -327,6 +399,10 @@ function InnerEditor() {
 			const flow = flowFromState(nodes, edges, assets);
 			saveToLocalStorage(flow);
 			await saveProjectAsZip(flow);
+			const savedHash = computeFlowHash(flow);
+			setLastSavedHash(savedHash);
+			setLastSavedHashState(savedHash);
+			initialHashRef.current = savedHash;
 			alert("wiislide.zip を保存しました");
 		} catch (e) {
 			alert(`保存に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
@@ -336,6 +412,10 @@ function InnerEditor() {
 	const onLoadProject = useCallback(async () => {
 		try {
 			const loaded = await loadProjectFromZip();
+			const loadedHash = computeFlowHash(loaded);
+			setLastSavedHash(loadedHash);
+			setLastSavedHashState(loadedHash);
+			initialHashRef.current = loadedHash;
 			setAssets(loaded.assets ?? []);
 			const { nodes: restoredNodes, edges: restoredEdges } = stateFromFlow(loaded);
 			setNodes(restoredNodes);
@@ -357,12 +437,25 @@ function InnerEditor() {
 		input.click();
 	}, [importFiles]);
 
-	const goHome = useCallback(() => {
-		router.push("/");
+	const clearAndGoHome = useCallback(async () => {
+		try {
+			clearEditorStorage();
+			await clearAllAssetBlobs();
+		} finally {
+			router.push("/");
+		}
 	}, [router]);
 
+	const onHomeClick = useCallback(() => {
+		if (isDirty) {
+			setShowLeaveWarning(true);
+			return;
+		}
+		void clearAndGoHome();
+	}, [clearAndGoHome, isDirty]);
+
 	const goPresent = useCallback(() => {
-		router.push("/present?auto=1");
+		router.push("/present?auto=1&from=editor");
 	}, [router]);
 
 	return (
@@ -381,7 +474,7 @@ function InnerEditor() {
 					alignItems: "center",
 				}}
 			>
-				<button onClick={goHome}>ホームに戻る</button>
+				<button onClick={onHomeClick}>ホームに戻る</button>
 				<button onClick={goPresent}>再生</button>
 				<button onClick={onImportClick} disabled={isImporting}>
 					{isImporting ? "取込中..." : "PDF/MP4 取込 (D&D可)"}
@@ -392,10 +485,54 @@ function InnerEditor() {
 				</button>
 				<button onClick={onSaveProject}>プロジェクト保存</button>
 				<button onClick={onLoadProject}>プロジェクト読み込み</button>
+				{isDirty ? (
+					<div style={{ fontSize: 12, color: "#b45309" }}>未保存</div>
+				) : (
+					<div style={{ fontSize: 12, color: "#16a34a" }}>保存済み</div>
+				)}
 				<div style={{ marginLeft: "auto", fontSize: 12, color: "#666" }}>
 					ローカル自動保存: ON
 				</div>
 			</div>
+
+			{showLeaveWarning ? (
+				<div
+					style={{
+						padding: 12,
+						borderBottom: "1px solid #eee",
+						background: "#fff7ed",
+						color: "#7c2d12",
+						display: "flex",
+						alignItems: "center",
+						gap: 8,
+						flexWrap: "wrap",
+					}}
+				>
+					<div style={{ fontSize: 13, fontWeight: 600 }}>
+						未保存の変更があります。このままホームに戻るとエディタはクリーンになります。
+					</div>
+					<div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+						<button
+							onClick={async () => {
+								await onSaveProject();
+								setShowLeaveWarning(false);
+								await clearAndGoHome();
+							}}
+						>
+							保存してホームへ
+						</button>
+						<button
+							onClick={async () => {
+								setShowLeaveWarning(false);
+								await clearAndGoHome();
+							}}
+						>
+							破棄してホームへ
+						</button>
+						<button onClick={() => setShowLeaveWarning(false)}>キャンセル</button>
+					</div>
+				</div>
+			) : null}
 
 			<div style={{ flex: 1, display: "flex", minHeight: 0 }}>
 				<div style={{ flex: 1 }}>

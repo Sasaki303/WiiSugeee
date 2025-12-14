@@ -20,6 +20,18 @@ export function PresenterView() {
 	const searchParams = useSearchParams();
 	const containerRef = useRef<HTMLDivElement | null>(null);
 
+	const returnTo = useMemo(() => {
+		return searchParams.get("from") === "editor" ? "/editor" : "/";
+	}, [searchParams]);
+
+	const returnLabel = useMemo(() => {
+		return returnTo === "/editor" ? "エディタに戻る" : "ホームに戻る";
+	}, [returnTo]);
+
+	const goBack = useCallback(() => {
+		router.push(returnTo);
+	}, [router, returnTo]);
+
 	// Wiiリモコンの状態を取得
 	const { wiiState, pressed } = useWiiController();
 
@@ -112,13 +124,13 @@ export function PresenterView() {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.key === "ArrowRight") nextSlide();
 			if (e.key === "ArrowLeft") prevSlide();
-			// ★修正: ESCキーで再生終了
-			if (e.key === "Escape") setMode("idle");
+			// ESCキーで元の画面へ戻る（エディタ経由ならエディタへ）
+			if (e.key === "Escape") goBack();
 		};
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [mode, nextSlide, prevSlide]);
+	}, [mode, nextSlide, prevSlide, goBack]);
 
 	// --- Wiiリモコン ロジック ---
 	useEffect(() => {
@@ -203,9 +215,14 @@ export function PresenterView() {
 			<main style={{ height: "100vh", display: "grid", placeItems: "center" }}>
 				<div style={{ textAlign: "center" }}>
 					<h1>Wii Presenter</h1>
+					<div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 10 }}>
+						<button onClick={goBack} style={{ padding: "10px 20px", fontSize: 16 }}>
+							{returnLabel}
+						</button>
 					<button onClick={onPlay} style={{ padding: "10px 20px", fontSize: 20 }}>
 						再生開始
 					</button>
+					</div>
 					<p style={{ marginTop: 20, color: '#666' }}>
 						Wiiリモコンを接続するか、キーボード(←/→)で操作できます。
 					</p>
@@ -218,6 +235,12 @@ export function PresenterView() {
 	return (
 		// ★修正: 背景黒 & 全画面設定
 		<main ref={containerRef} style={{ position: "relative", width: "100vw", height: "100vh", overflow: "hidden", background: "black" }}>
+			{/* 戻るボタン（左上） */}
+			<div style={{ position: "absolute", top: 20, left: 20, zIndex: 10000 }}>
+				<button onClick={goBack} style={{ padding: "10px 14px", fontSize: 14 }}>
+					{returnLabel}
+				</button>
+			</div>
 
 			{/* ★修正: スライド表示エリア (全画面・余白なし・アスペクト比維持) */}
 			<div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>

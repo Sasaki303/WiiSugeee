@@ -48,3 +48,19 @@ export async function getAssetBlob(assetId: string): Promise<Blob | null> {
 		req.onerror = () => reject(req.error);
 	});
 }
+
+export async function clearAllAssetBlobs(): Promise<void> {
+	const db = await openDb();
+	await new Promise<void>((resolve, reject) => {
+		const tx = db.transaction(STORE_NAME, "readwrite");
+		tx.oncomplete = () => {
+			db.close();
+			resolve();
+		};
+		tx.onerror = () => {
+			db.close();
+			reject(tx.error);
+		};
+		tx.objectStore(STORE_NAME).clear();
+	});
+}

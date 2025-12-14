@@ -43,6 +43,7 @@ export type SerializedFlow = {
 };
 
 const STORAGE_KEY = "wiisugeee.editor.flow.v1";
+const LAST_SAVED_HASH_KEY = "wiisugeee.editor.lastSavedHash.v1";
 
 export function serializeFlow(flow: SerializedFlow): string {
 	return JSON.stringify(flow, null, 2);
@@ -76,5 +77,30 @@ export function loadFromLocalStorage(): SerializedFlow | null {
 		return tryParseFlowJson(text);
 	} catch {
 		return null;
+	}
+}
+
+export function getLastSavedHash(): string | null {
+	try {
+		return localStorage.getItem(LAST_SAVED_HASH_KEY);
+	} catch {
+		return null;
+	}
+}
+
+export function setLastSavedHash(hash: string): void {
+	try {
+		localStorage.setItem(LAST_SAVED_HASH_KEY, hash);
+	} catch {
+		// ignore
+	}
+}
+
+export function clearEditorStorage(): void {
+	try {
+		localStorage.removeItem(STORAGE_KEY);
+		localStorage.removeItem(LAST_SAVED_HASH_KEY);
+	} catch {
+		// ignore
 	}
 }
