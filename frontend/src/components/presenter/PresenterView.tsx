@@ -478,10 +478,7 @@ export function PresenterView() {
 			</div>
 
 			{/* ★追加: リアクション（右下に重ねる） */}
-			<ReactionOverlay
-				emitClap={!!pressed.One || debugEmitClap}
-				emitLaugh={!!pressed.Two || debugEmitLaugh}
-			/>
+			<ReactionOverlay emitClap={!!pressed.One} emitLaugh={!!pressed.Two} />
 
 			{/* ★修正: スライド表示エリア (全画面・余白なし・アスペクト比維持) */}
 			<div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
