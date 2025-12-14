@@ -51,6 +51,8 @@ function computeFlowHash(flow: SerializedFlow): string {
 	return hashString(JSON.stringify(minimal));
 }
 
+const EMPTY_FLOW_HASH = computeFlowHash({ version: 1, assets: [], nodes: [], edges: [] });
+
 async function pdfToThumbnails(file: File): Promise<Array<{ page: number; dataUrl?: string }>> {
 	const arrayBuffer = await file.arrayBuffer();
 	// pdfjs-dist は bundler 相性があるため legacy を使用
@@ -135,42 +137,42 @@ function InnerEditor() {
 	const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
 	const [showLeaveWarning, setShowLeaveWarning] = useState(false);
 	const [lastSavedHash, setLastSavedHashState] = useState<string | null>(null);
-	const initialHashRef = useRef<string | null>(null);
 
 	const nodeTypes = useMemo(() => ({ slide: SlideNode }), []);
 
 	useEffect(() => {
-		setLastSavedHashState(getLastSavedHash());
+		const persistedLastSavedHash = getLastSavedHash();
+		setLastSavedHashState(persistedLastSavedHash);
 
 		const saved = loadFromLocalStorage();
 		if (!saved) {
 			setAssets([]);
-			setNodes([
-				{
-					id: nanoid(),
-					type: "slide",
-					position: { x: 80, y: 80 },
-					data: { label: "Start" },
-				},
-			]);
+			setNodes([]);
 			setEdges([]);
-			initialHashRef.current = computeFlowHash(
-				flowFromState(
-					[
-						{
-							id: "__start__",
-							type: "slide",
-							position: { x: 80, y: 80 },
-							data: { label: "Start" },
-						},
-					],
-					[],
-					[],
-				),
-			);
 			setIsHydrated(true);
 			return;
 		}
+
+		// 過去バージョンで「Start」スライドが自動生成されていた場合、未保存プロジェクトであれば
+		// それを“空キャンバス”として扱って、エディタ突入時に Start が出ないようにする。
+		const looksLikeLegacyAutoStart =
+			!persistedLastSavedHash &&
+			(saved.assets?.length ?? 0) === 0 &&
+			saved.nodes.length === 1 &&
+			saved.edges.length === 0 &&
+			saved.nodes[0]?.type === "slide" &&
+			saved.nodes[0]?.data?.label === "Start";
+		if (looksLikeLegacyAutoStart) {
+			setAssets([]);
+			setNodes([]);
+			setEdges([]);
+			if (saved.viewport) {
+				setViewport(saved.viewport);
+			}
+			setIsHydrated(true);
+			return;
+		}
+
 		setAssets(saved.assets ?? []);
 		const { nodes: restoredNodes, edges: restoredEdges } = stateFromFlow(saved);
 		setNodes(restoredNodes);
@@ -180,7 +182,6 @@ function InnerEditor() {
 		if (saved.viewport) {
 			setViewport(saved.viewport);
 		}
-		initialHashRef.current = computeFlowHash(saved);
 		setIsHydrated(true);
 	}, [setEdges, setNodes, setViewport]); // <--- 依存配列に setViewport を追加
 
@@ -192,8 +193,7 @@ function InnerEditor() {
 	const isDirty = useMemo(() => {
 		if (!isHydrated) return false;
 		if (lastSavedHash) return currentFlowHash !== lastSavedHash;
-		if (!initialHashRef.current) return false;
-		return currentFlowHash !== initialHashRef.current;
+		return currentFlowHash !== EMPTY_FLOW_HASH;
 	}, [currentFlowHash, isHydrated, lastSavedHash]);
 
 	useEffect(() => {
@@ -371,7 +371,6 @@ function InnerEditor() {
 						const loadedHash = computeFlowHash(loaded);
 						setLastSavedHash(loadedHash);
 						setLastSavedHashState(loadedHash);
-						initialHashRef.current = loadedHash;
 						setAssets(loaded.assets ?? []);
 						const { nodes: restoredNodes, edges: restoredEdges } = stateFromFlow(loaded);
 						setNodes(restoredNodes);
@@ -402,7 +401,6 @@ function InnerEditor() {
 			const savedHash = computeFlowHash(flow);
 			setLastSavedHash(savedHash);
 			setLastSavedHashState(savedHash);
-			initialHashRef.current = savedHash;
 			alert("wiislide.zip を保存しました");
 		} catch (e) {
 			alert(`保存に失敗しました: ${e instanceof Error ? e.message : String(e)}`);
@@ -415,7 +413,6 @@ function InnerEditor() {
 			const loadedHash = computeFlowHash(loaded);
 			setLastSavedHash(loadedHash);
 			setLastSavedHashState(loadedHash);
-			initialHashRef.current = loadedHash;
 			setAssets(loaded.assets ?? []);
 			const { nodes: restoredNodes, edges: restoredEdges } = stateFromFlow(loaded);
 			setNodes(restoredNodes);
