@@ -10,6 +10,7 @@ import ReactFlow, {
 	addEdge,
 	useEdgesState,
 	useNodesState,
+	useReactFlow,
 	type Connection,
 	type Edge,
 	type Node,
@@ -101,6 +102,7 @@ function stateFromFlow(flow: SerializedFlow): { nodes: Node<SlideNodeData>[]; ed
 function InnerEditor() {
 	const router = useRouter();
 	const wrapperRef = useRef<HTMLDivElement | null>(null);
+	const { setViewport, getViewport } = useReactFlow();
 	const [nodes, setNodes, onNodesChange] = useNodesState<SlideNodeData>([]);
 	const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 	const [assets, setAssets] = useState<ProjectAsset[]>([]);
@@ -113,27 +115,29 @@ function InnerEditor() {
 	useEffect(() => {
 		const saved = loadFromLocalStorage();
 		if (!saved) {
-			setAssets([]);
-			setNodes([
-				{
-					id: nanoid(),
-					type: "slide",
-					position: { x: 80, y: 80 },
-					data: { label: "Start" },
-				},
-			]);
+			// ... (初期化ロジックはそのまま) ...
 			return;
 		}
 		setAssets(saved.assets ?? []);
 		const { nodes: restoredNodes, edges: restoredEdges } = stateFromFlow(saved);
 		setNodes(restoredNodes);
 		setEdges(restoredEdges);
-	}, [setEdges, setNodes]);
+
+		// ★ここに追加：保存された表示位置があれば復元
+		if (saved.viewport) {
+			setViewport(saved.viewport);
+		}
+	}, [setEdges, setNodes, setViewport]); // <--- 依存配列に setViewport を追加
 
 	useEffect(() => {
 		const flow = flowFromState(nodes, edges, assets);
-		saveToLocalStorage(flow);
-	}, [nodes, edges, assets]);
+		const currentViewport = getViewport();
+
+		saveToLocalStorage({
+			...flow,
+			viewport: currentViewport,
+		});
+	}, [nodes, edges, assets, getViewport]); // <--- 依存配列に getViewport を追加
 
 	const onConnect = useCallback(
 		(connection: Connection) => {

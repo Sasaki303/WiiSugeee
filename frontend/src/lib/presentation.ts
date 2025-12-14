@@ -27,6 +27,7 @@ export type SlideNodeData = {
 export type SerializedFlow = {
 	version: 1;
 	assets?: ProjectAsset[];
+	viewport?: { x: number; y: number; zoom: number };
 	nodes: Array<{
 		id: string;
 		type?: string;
