@@ -317,20 +317,42 @@ export function PresenterView() {
 		setMode("playing");
 	}, []);
 
+	// ★追加: キーボードでリアクションをデバッグする（N=One, M=Two）
+	const [debugEmitClap, setDebugEmitClap] = useState(false);
+	const [debugEmitLaugh, setDebugEmitLaugh] = useState(false);
+
 	// キーボード操作 (矢印キー対応 + ESCで戻る)
 	useEffect(() => {
 		if (mode !== "playing") return;
 
 		const handleKeyDown = (e: KeyboardEvent) => {
+			// ★追加: リアクション（N / M）
+			// 押しっぱなしで増殖しないように repeat を無視
+			if (!e.repeat) {
+				if (e.key === "n" || e.key === "N") {
+					setDebugEmitClap(true);
+					queueMicrotask(() => setDebugEmitClap(false)); // 1回だけ発火
+					return;
+				}
+				if (e.key === "m" || e.key === "M") {
+					setDebugEmitLaugh(true);
+					queueMicrotask(() => setDebugEmitLaugh(false)); // 1回だけ発火
+					return;
+				}
+			}
+
+			// 既存: 分岐 1..9
 			if (e.key >= "1" && e.key <= "9") {
 				branchByNumberKey(e.key);
 				return;
 			}
+			// 既存: スライド移動
 			if (e.key === "ArrowRight") {
 				if (!hasMultipleBranches) nextSlide();
 			}
 			if (e.key === "ArrowLeft") prevSlide();
-			// ESCキーで元の画面へ戻る（エディタ経由ならエディタへ）
+
+			// 既存: ESC
 			if (e.key === "Escape") goBack();
 		};
 
@@ -456,7 +478,10 @@ export function PresenterView() {
 			</div>
 
 			{/* ★追加: リアクション（右下に重ねる） */}
-			<ReactionOverlay emitClap={!!pressed.One} emitLaugh={!!pressed.Two} />
+			<ReactionOverlay
+				emitClap={!!pressed.One || debugEmitClap}
+				emitLaugh={!!pressed.Two || debugEmitLaugh}
+			/>
 
 			{/* ★修正: スライド表示エリア (全画面・余白なし・アスペクト比維持) */}
 			<div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
