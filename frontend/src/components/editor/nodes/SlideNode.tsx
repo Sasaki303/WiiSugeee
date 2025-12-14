@@ -1,10 +1,57 @@
 "use client";
 
-import { Handle, Position, type NodeProps } from "reactflow";
+import { Handle, Position, type NodeProps, useStore } from "reactflow";
 import type { SlideNodeData } from "@/lib/presentation";
 
 export function SlideNode(props: NodeProps<SlideNodeData>) {
-	const { data, selected } = props;
+	const { id, data, selected } = props;
+	const rfEdges = useStore((s) => s.edges);
+
+	// 常時表示: 「出力が2本以上あるノード」からこのノードへ入ってくるエッジがあれば、
+	// その分岐番号(1-9)を左ハンドルに表示する。
+	// 複数の分岐元から入ってくる場合は "1/3" のように併記する。
+	const branchKeysForThisNode = (() => {
+		const bySource = new Map<string, typeof rfEdges>();
+		for (const e of rfEdges) {
+			const arr = bySource.get(e.source);
+			if (arr) arr.push(e);
+			else bySource.set(e.source, [e]);
+		}
+
+		const keys = new Set<string>();
+		for (const [sourceId, outgoingEdges] of bySource.entries()) {
+			if (outgoingEdges.length < 2) continue;
+
+			const options: Array<{ key: string; target: string }> = [];
+			const used = new Set<string>();
+
+			for (const edge of outgoingEdges) {
+				const label = String(edge.label ?? "").trim();
+				const m = label.match(/^([1-9])(?:\b|\s|:|-)/);
+				if (m) {
+					const k = m[1];
+					if (!used.has(k)) {
+						options.push({ key: k, target: edge.target });
+						used.add(k);
+					}
+				}
+			}
+
+			for (const edge of outgoingEdges) {
+				if (options.length >= 9) break;
+				const nextKey = String(options.length + 1);
+				if (used.has(nextKey)) continue;
+				options.push({ key: nextKey, target: edge.target });
+				used.add(nextKey);
+			}
+
+			const found = options.find((o) => o.target === id);
+			if (found?.key) keys.add(found.key);
+		}
+
+		return Array.from(keys).sort((a, b) => Number(a) - Number(b));
+	})();
+
 	const isConnectableMedia =
 		data.asset?.kind === "pdf" || data.asset?.kind === "video" || data.asset?.kind === "image";
 	return (
@@ -30,8 +77,16 @@ export function SlideNode(props: NodeProps<SlideNodeData>) {
 							background: "#fff",
 							border: "2px solid #666",
 							left: -18,
+							display: "flex",
+							alignItems: "center",
+							justifyContent: "center",
+							fontSize: 12,
+							fontWeight: 700,
+							color: "#111",
 						}}
-					/>
+					>
+						{branchKeysForThisNode.length > 0 ? branchKeysForThisNode.join("/") : null}
+					</Handle>
 					<Handle
 						type="source"
 						position={Position.Right}
