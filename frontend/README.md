@@ -72,3 +72,22 @@ function MyComponent() {
 
 - ローカルで WebSocket サーバ（Wii 入力をブリッジするサーバ）が必要です。デフォルトでは `ws://localhost:8080` に接続します。
 - TypeScript を使用している場合、フックの型定義は `frontend/src/hooks/useWiiController.ts` に記載されています。
+
+## キーボードによる Wii 入力エミュレーション（デバッグ用）
+
+Wii リモコンが未接続でも挙動確認できるように、キーボード入力を Wii のボタン入力として扱うデバッグ用キーバインドを用意しています。
+
+- 十字キー
+  - `I` = `Up`
+  - `J` = `Left`
+  - `K` = `Down`
+  - `L` = `Right`
+- `;` = `Plus`
+- `-` = `Minus`
+- `H` = `Home`
+- `O` = `A`
+- `P` = `B`
+- `N` = `One`（👏 拍手リアクション）
+- `M` = `Two`（😆 笑いリアクション）
+
+これらは発表画面などで `useWiiController()` が返す `wiiState.buttons` / `pressed` と同等として扱われます。
