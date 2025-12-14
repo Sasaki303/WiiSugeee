@@ -203,6 +203,42 @@ export function PresenterView() {
 		flow?.nodes.find((n) => n.id === currentNodeId),
 		[flow, currentNodeId]);
 
+	const outgoingEdges = useMemo(() => {
+		if (!flow || !currentNodeId) return [];
+		return flow.edges.filter((e) => e.source === currentNodeId);
+	}, [flow, currentNodeId]);
+
+	const branchOptions = useMemo(() => {
+		// 1-9 の数字で選べる分岐
+		const options: Array<{ key: string; target: string }> = [];
+		const used = new Set<string>();
+
+		for (const edge of outgoingEdges) {
+			const label = (edge.label ?? "").trim();
+			const m = label.match(/^([1-9])(?:\b|\s|:|-)/);
+			if (m) {
+				const k = m[1];
+				if (!used.has(k)) {
+					options.push({ key: k, target: edge.target });
+					used.add(k);
+				}
+			}
+		}
+
+		// ラベルに番号がない場合は、配列順で 1..n を割り当て
+		for (const edge of outgoingEdges) {
+			if (options.length >= 9) break;
+			const nextKey = String(options.length + 1);
+			if (used.has(nextKey)) continue;
+			options.push({ key: nextKey, target: edge.target });
+			used.add(nextKey);
+		}
+
+		return options;
+	}, [outgoingEdges]);
+
+	const hasMultipleBranches = outgoingEdges.length >= 2;
+
 	// ノード移動処理
 	const navigateTo = useCallback((nodeId: string) => {
 		// クールタイムチェック (500ms以内の連続遷移は無視)
@@ -217,9 +253,12 @@ export function PresenterView() {
 	// 次へ（ロジック改良版）
 	const nextSlide = useCallback(() => {
 		if (!flow || !currentNodeId) return;
+		// 分岐が複数ある場合は、数字選択を優先する
+		const edges = flow.edges.filter((e) => e.source === currentNodeId);
+		if (edges.length >= 2) return;
 
 		// 現在のノードから出ているエッジをすべて取得
-		const edges = flow.edges.filter(e => e.source === currentNodeId);
+		// (上で取得済み)
 
 		if (edges.length === 0) return;
 
@@ -234,6 +273,15 @@ export function PresenterView() {
 
 		if (targetEdge) navigateTo(targetEdge.target);
 	}, [flow, currentNodeId, navigateTo]);
+
+	const branchByNumberKey = useCallback(
+		(key: string) => {
+			if (!hasMultipleBranches) return;
+			const opt = branchOptions.find((o) => o.key === key);
+			if (opt) navigateTo(opt.target);
+		},
+		[branchOptions, hasMultipleBranches, navigateTo],
+	);
 
 	// 前へ（逆順検索）
 	const prevSlide = useCallback(() => {
@@ -273,7 +321,13 @@ export function PresenterView() {
 		if (mode !== "playing") return;
 
 		const handleKeyDown = (e: KeyboardEvent) => {
-			if (e.key === "ArrowRight") nextSlide();
+			if (e.key >= "1" && e.key <= "9") {
+				branchByNumberKey(e.key);
+				return;
+			}
+			if (e.key === "ArrowRight") {
+				if (!hasMultipleBranches) nextSlide();
+			}
 			if (e.key === "ArrowLeft") prevSlide();
 			// ESCキーで元の画面へ戻る（エディタ経由ならエディタへ）
 			if (e.key === "Escape") goBack();
@@ -281,14 +335,14 @@ export function PresenterView() {
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [mode, nextSlide, prevSlide, goBack]);
+	}, [mode, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches]);
 
 	// --- Wiiリモコン ロジック ---
 	useEffect(() => {
 		if (mode !== "playing") return;
 
 		// 1. スライド進行 (十字キー)
-		if (pressed.Right) nextSlide();
+		if (pressed.Right && !hasMultipleBranches) nextSlide();
 		if (pressed.Left) prevSlide();
 
 		// 2. 分岐 (Plus / Minus / Home)
@@ -306,7 +360,7 @@ export function PresenterView() {
 			alert("🎉 クラッカーエフェクト！");
 		}
 
-	}, [pressed, mode, nextSlide, prevSlide, branchTo]);
+	}, [pressed, mode, nextSlide, prevSlide, branchTo, hasMultipleBranches]);
 
 	// --- 描画ロジック (IRセンサー & Aボタン) ---
 	useEffect(() => {
