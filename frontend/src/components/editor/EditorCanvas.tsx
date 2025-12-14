@@ -172,7 +172,7 @@ function stateFromFlow(flow: SerializedFlow): { nodes: Node<SlideNodeData>[]; ed
 function InnerEditor() {
 	const router = useRouter();
 	const wrapperRef = useRef<HTMLDivElement | null>(null);
-	const { setViewport, getViewport } = useReactFlow();
+	const { setViewport, getViewport, setCenter } = useReactFlow();
 	const [nodes, setNodes, onNodesChange] = useNodesState<SlideNodeData>([]);
 	const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 	const [assets, setAssets] = useState<ProjectAsset[]>([]);
@@ -616,7 +616,13 @@ function InnerEditor() {
 						fitView
 					>
 						<Background />
-						<MiniMap />
+						<MiniMap
+							position="bottom-right"
+							onClick={(_, pos) => {
+								const vp = getViewport();
+								setCenter(pos.x, pos.y, { zoom: vp.zoom });
+							}}
+						/>
 						<Controls />
 					</ReactFlow>
 				</div>
