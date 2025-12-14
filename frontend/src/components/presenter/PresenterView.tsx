@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { loadFromLocalStorage, type SerializedFlow } from "@/lib/presentation";
 import { getAssetBlob } from "@/lib/idbAssets";
 import { useWiiController, type WiiState } from "@/hooks/useWiiController";
+import { ReactionOverlay } from "@/components/presenter/ReactionOverlay"; // 追加
 
 type Mode = "idle" | "playing";
 
@@ -351,15 +352,14 @@ export function PresenterView() {
 		if (pressed.Home) branchTo(["home", "top", "戻る"]);
 
 		// 3. エフェクト (1 / 2)
+		// alert は UI をブロックしてプレゼンの邪魔になるので削除。
+		// 表示は <ReactionOverlay> 側に任せる。
 		if (pressed.One) {
-			console.log("👏 拍手！");
-			alert("👏 拍手エフェクト！");
+			console.log("👏 clap");
 		}
 		if (pressed.Two) {
-			console.log("🎉 クラッカー！");
-			alert("🎉 クラッカーエフェクト！");
+			console.log("😆 laugh");
 		}
-
 	}, [pressed, mode, nextSlide, prevSlide, branchTo, hasMultipleBranches]);
 
 	// --- 描画ロジック (IRセンサー & Aボタン) ---
@@ -438,14 +438,25 @@ export function PresenterView() {
 	}
 
 	return (
-		// ★修正: 背景黒 & 全画面設定
-		<main ref={containerRef} style={{ position: "relative", width: "100vw", height: "100vh", overflow: "hidden", background: "black" }}>
+		<main
+			ref={containerRef}
+			style={{
+				position: "relative",
+				width: "100vw",
+				height: "100vh",
+				overflow: "hidden",
+				background: "black",
+			}}
+		>
 			{/* 戻るボタン（左上） */}
 			<div style={{ position: "absolute", top: 20, left: 20, zIndex: 10000 }}>
 				<button onClick={goBack} style={{ padding: "10px 14px", fontSize: 14 }}>
 					{returnLabel}
 				</button>
 			</div>
+
+			{/* ★追加: リアクション（右下に重ねる） */}
+			<ReactionOverlay emitClap={!!pressed.One} emitLaugh={!!pressed.Two} />
 
 			{/* ★修正: スライド表示エリア (全画面・余白なし・アスペクト比維持) */}
 			<div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -479,23 +490,25 @@ export function PresenterView() {
 			/>
 
 			{/* デバッグ情報 (右上・大きく表示) */}
-			<div style={{
-				position: "absolute",
-				top: 20,
-				right: 20,
-				background: "rgba(0,0,0,0.8)",
-				color: "#0f0", // 緑色で見やすく
-				padding: "15px 20px",
-				borderRadius: 8,
-				fontSize: "18px", // フォント大きく
-				fontFamily: "monospace",
-				zIndex: 9999, // 最前面
-				pointerEvents: "none"
-			}}>
+			<div
+				style={{
+					position: "absolute",
+					top: 20,
+					right: 20,
+					background: "rgba(0,0,0,0.8)",
+					color: "#0f0",
+					padding: "15px 20px",
+					borderRadius: 8,
+					fontSize: "18px",
+					fontFamily: "monospace",
+					zIndex: 9999,
+					pointerEvents: "none",
+				}}
+			>
 				<div style={{ fontWeight: "bold", borderBottom: "1px solid #555", marginBottom: 5 }}>Wii Debug</div>
 				<div>Acc: X={wiiState?.accel.x.toString().padStart(3)} Y={wiiState?.accel.y.toString().padStart(3)} Z={wiiState?.accel.z.toString().padStart(3)}</div>
 				<div>IR Pts: {wiiState?.ir.length}</div>
-				<div>Btn: {Object.keys(wiiState?.buttons || {}).filter(k => wiiState?.buttons[k as keyof WiiState['buttons']]).join(', ')}</div>
+				<div>Btn: {Object.keys(wiiState?.buttons || {}).filter(k => wiiState?.buttons[k as keyof WiiState["buttons"]]).join(", ")}</div>
 			</div>
 
 			{/* 操作ガイド (左下) */}
