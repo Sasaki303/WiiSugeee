@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ReactFlow, {
-	Background,
 	Controls,
 	MiniMap,
 	ReactFlowProvider,
@@ -12,6 +11,7 @@ import ReactFlow, {
 	useEdgesState,
 	useNodesState,
 	useReactFlow,
+	useStore,
 	type Connection,
 	type Edge,
 	type Node,
@@ -53,6 +53,41 @@ function computeFlowHash(flow: SerializedFlow): string {
 }
 
 const EMPTY_FLOW_HASH = computeFlowHash({ version: 1, assets: [], nodes: [], edges: [] });
+
+function StarBackground() {
+	// ReactFlowのパン/ズームに追従
+	const [tx, ty, zoom] = useStore((s) => s.transform);
+
+	// もともとの <Background /> のデフォルト感に合わせる
+	const gap = 25;
+	const outer = 1.2;
+	const inner = 0.6;
+	const cx = gap / 2;
+	const cy = gap / 2;
+	// 4つの尖りはouter、辺は内側(inner)へ湾曲
+	const starPath = `M ${cx} ${cy - outer} Q ${cx + inner} ${cy - inner} ${cx + outer} ${cy} Q ${cx + inner} ${cy + inner} ${cx} ${cy + outer} Q ${cx - inner} ${cy + inner} ${cx - outer} ${cy} Q ${cx - inner} ${cy - inner} ${cx} ${cy - outer} Z`;
+
+	return (
+		<svg
+			className="react-flow__background"
+			aria-hidden="true"
+			style={{ width: "100%", height: "100%", position: "absolute", inset: 0, pointerEvents: "none" }}
+		>
+			<defs>
+				<pattern
+					id="rf-star-bg"
+					patternUnits="userSpaceOnUse"
+					width={gap}
+					height={gap}
+					patternTransform={`translate(${tx} ${ty}) scale(${zoom})`}
+				>
+					<path d={starPath} fill="#aaa" />
+				</pattern>
+			</defs>
+			<rect width="100%" height="100%" fill="url(#rf-star-bg)" />
+		</svg>
+	);
+}
 
 async function pdfToThumbnails(file: File): Promise<Array<{ page: number; dataUrl?: string }>> {
 	const arrayBuffer = await file.arrayBuffer();
@@ -718,7 +753,7 @@ function InnerEditor() {
 						panOnDrag={[1, 2]}
 						fitView
 					>
-						<Background />
+						<StarBackground />
 						<MiniMap
 							position="bottom-right"
 							onClick={(_, pos) => {
