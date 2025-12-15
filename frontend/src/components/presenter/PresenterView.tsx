@@ -6,6 +6,7 @@ import { loadFromLocalStorage, type SerializedFlow } from "@/lib/presentation";
 import { getAssetBlob } from "@/lib/idbAssets";
 import { useWiiController, type WiiState } from "@/hooks/useWiiController";
 import { ReactionOverlay } from "@/components/presenter/ReactionOverlay"; // 追加
+import { WiiDisconnectPopup } from "@/components/presenter/WiiDisconnectPopup";
 
 type Mode = "idle" | "playing";
 
@@ -197,13 +198,15 @@ export function PresenterView() {
 	}, [router, returnTo]);
 
 	// Wiiリモコンの状態を取得
-	const { wiiState, pressed, wiiConnected } = useWiiController();
+	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt } = useWiiController();
 
 	const [mode, setMode] = useState<Mode>("idle");
 	const [flow, setFlow] = useState<SerializedFlow | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
 	const [startedWithWii, setStartedWithWii] = useState(false);
+	// ★追加: 再生開始時刻（開始後の切断のみポップアップを出すため）
+	const [playingSince, setPlayingSince] = useState<number>(0);
 	const pdfDocCacheRef = useRef<Map<string, Promise<any>>>(new Map());
 
 	const getOrLoadPdfDocument = useCallback(async (assetId: string) => {
@@ -344,20 +347,17 @@ export function PresenterView() {
 
 	// 再生開始
 	const onPlay = useCallback(() => {
-		if (!wiiConnected) {
-			setError("Wiiリモコンが接続されていません。");
-			return;
-		}
 		const loaded = loadFromLocalStorage();
 		if (!loaded || loaded.nodes.length === 0) {
 			setError("データが見つかりません。Editorで作成してください。");
 			return;
 		}
 		setFlow(loaded);
-		// Startラベルがあるノード、なければ先頭
 		const startNode = loaded.nodes.find(n => n.data.label === "Start") || loaded.nodes[0];
 		setCurrentNodeId(startNode.id);
-		setStartedWithWii(true);
+		setStartedWithWii(!!wiiConnected);
+		// ★追加: 再生開始時刻を記録
+		setPlayingSince(Date.now());
 		setMode("playing");
 	}, [wiiConnected]);
 
@@ -514,25 +514,14 @@ export function PresenterView() {
 				background: "black",
 			}}
 		>
-			{mode === "playing" && startedWithWii && !wiiConnected ? (
-				<div
-					style={{
-						position: "absolute",
-						inset: 0,
-						zIndex: 20000,
-						display: "grid",
-						placeItems: "center",
-						background: "rgba(0,0,0,0.75)",
-						color: "white",
-						textAlign: "center",
-						pointerEvents: "none",
-						fontSize: 32,
-						fontWeight: 700,
-					}}
-				>
-					<div>wiiリモコンの接続が切れました⛓️‍</div>
-				</div>
-			) : null}
+			<WiiDisconnectPopup
+				isPlaying={mode === "playing"}
+				startedWithWii={startedWithWii}
+				wiiConnected={wiiConnected}
+				wiiDisconnectedAt={wiiDisconnectedAt}
+				playingSince={playingSince}
+			/>
+
 			{/* 戻るボタン（左上） */}
 			<div style={{ position: "absolute", top: 20, left: 20, zIndex: 10000 }}>
 				<button onClick={goBack} style={{ padding: "10px 14px", fontSize: 14 }}>
