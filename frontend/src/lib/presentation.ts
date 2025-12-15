@@ -2,7 +2,7 @@ import type { ButtonBindings } from "@/lib/buttonBindings";
 
 export type ProjectAsset = {
 	id: string;
-	kind: "pdf" | "video";
+	kind: "pdf" | "video" | "image";
 	fileName: string;
 	storedFileName: string; // assets/ 配下のファイル名
 };
@@ -17,6 +17,12 @@ export type AssetRef =
 	  }
 	| {
 			kind: "video";
+			assetId: string;
+			fileName: string;
+			thumbnailDataUrl?: string;
+	  }
+	| {
+			kind: "image";
 			assetId: string;
 			fileName: string;
 			thumbnailDataUrl?: string;

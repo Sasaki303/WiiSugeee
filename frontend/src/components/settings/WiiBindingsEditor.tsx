@@ -1,31 +1,31 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DEFAULT_BINDINGS as DEFAULT_PROJECT_BINDINGS, mergeBindings, type ButtonBindings } from "@/lib/buttonBindings";
-import { loadProjectBindings, saveProjectBindings } from "@/lib/projectBindingsStorage";
+import { mergeBindings, type ButtonBindings } from "@/lib/buttonBindings";
+import { getProjectBindings, setProjectBindings } from "@/lib/projectBindingsStorage";
 
 type SlotId = "A" | "B" | "PLUS" | "MINUS" | "HOME" | "ONE" | "TWO" | "UP" | "DOWN" | "LEFT" | "RIGHT";
 type FuncId =
-    | "NEXT"
-    | "PREV"
-    | "HOME"
-    | "CLAP"
-    | "SMILE"
-    | "PLUS"
-    | "MINUS"
-    | "UP"
-    | "DOWN"
-    | "A"
-    | "B"
-    | "CASE_A"
-    | "CASE_B"
-    | "CASE_C"
-    | "CASE_D"
-    | "CASE_E"
-    | "CASE_F"
-    | "CASE_G"
-    | "CASE_H"
-    | "CASE_I";
+	| "NEXT"
+	| "PREV"
+	| "HOME"
+	| "CLAP"
+	| "SMILE"
+	| "PLUS"
+	| "MINUS"
+	| "UP"
+	| "DOWN"
+	| "A"
+	| "B"
+	| "CASE_A"
+	| "CASE_B"
+	| "CASE_C"
+	| "CASE_D"
+	| "CASE_E"
+	| "CASE_F"
+	| "CASE_G"
+	| "CASE_H"
+	| "CASE_I";
 
 type Bindings = Record<SlotId, FuncId>;
 
@@ -173,6 +173,24 @@ function toAction(funcId: FuncId): ButtonBindings[keyof ButtonBindings] {
 			return { type: "branch", kind: "B" };
 		case "HOME":
 			return { type: "branch", kind: "HOME" };
+		case "CASE_A":
+			return { type: "branchIndex", index: 1 };
+		case "CASE_B":
+			return { type: "branchIndex", index: 2 };
+		case "CASE_C":
+			return { type: "branchIndex", index: 3 };
+		case "CASE_D":
+			return { type: "branchIndex", index: 4 };
+		case "CASE_E":
+			return { type: "branchIndex", index: 5 };
+		case "CASE_F":
+			return { type: "branchIndex", index: 6 };
+		case "CASE_G":
+			return { type: "branchIndex", index: 7 };
+		case "CASE_H":
+			return { type: "branchIndex", index: 8 };
+		case "CASE_I":
+			return { type: "branchIndex", index: 9 };
 		case "UP":
 		case "DOWN":
 		case "A":
@@ -205,6 +223,20 @@ function fromAction(a: ButtonBindings[keyof ButtonBindings] | undefined, fallbac
 	if (a.type === "next") return "NEXT";
 	if (a.type === "prev") return "PREV";
 	if (a.type === "reaction") return a.kind === "clap" ? "CLAP" : "SMILE";
+	if (a.type === "branchIndex") {
+		const map: Record<number, FuncId> = {
+			1: "CASE_A",
+			2: "CASE_B",
+			3: "CASE_C",
+			4: "CASE_D",
+			5: "CASE_E",
+			6: "CASE_F",
+			7: "CASE_G",
+			8: "CASE_H",
+			9: "CASE_I",
+		};
+		return map[a.index] ?? fallback;
+	}
 	if (a.type === "branch") {
 		if (a.kind === "A") return "PLUS";
 		if (a.kind === "B") return "MINUS";
@@ -231,32 +263,42 @@ function fromButtonBindings(bindings: ButtonBindings | undefined): Bindings {
 }
 
 export function WiiBindingsEditor() {
-	// 将来：最大分岐数をフローから算出してここに入れる（最大9）
-	const [maxCase] = useState<number>(9);
+    const [maxCase] = useState<number>(9);
+    const funcs = useMemo(() => allFuncs(maxCase), [maxCase]);
 
-	const funcs = useMemo(() => allFuncs(maxCase), [maxCase]);
+    const readStored = (): Bindings => {
+        const stored = getProjectBindings();
+        if (!stored) return DEFAULT_BINDINGS;
+        return fromButtonBindings(stored);
+    };
 
-	// project.json から初期ロード
-	const [bindings, setBindings] = useState<Bindings>(() => {
-		const stored = loadProjectBindings();
-		if (!stored) return DEFAULT_BINDINGS;
-		return fromButtonBindings(stored);
-	});
+    const [bindings, setBindings] = useState<Bindings>(() => readStored());
+    const [savedBindings, setSavedBindings] = useState<Bindings>(() => readStored());
 
-	useEffect(() => {
-		// 変更を project.json (localStorageのflow) に反映
-		// NOTE: 現時点では FuncId→BindingAction の変換は限定的（NEXT/PREV/HOME/CLAP/SMILE/+/- のみ対応）
-		saveProjectBindings(toButtonBindings(bindings));
-	}, [bindings]);
+    const isDirty = useMemo(() => JSON.stringify(bindings) !== JSON.stringify(savedBindings), [bindings, savedBindings]);
 
-    // 追加：パレット検索
-    const [funcQuery, setFuncQuery] = useState<string>("");
+    const onSave = () => {
+        setProjectBindings(toButtonBindings(bindings)); // localStorageへ保存
+        setSavedBindings(bindings);
+    };
 
-    const filteredFuncs = useMemo(() => {
-        const q = funcQuery.trim().toLowerCase();
-        if (!q) return funcs;
-        return funcs.filter((f) => funcLabel(f).toLowerCase().includes(q));
-    }, [funcs, funcQuery]);
+    const onResetToDefault = () => {
+        setBindings(DEFAULT_BINDINGS);
+    };
+
+    const reloadFromStorage = () => {
+        const next = readStored(); // localStorageから再読込
+        setBindings(next);
+        setSavedBindings(next);
+    };
+
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
+
+    // ✅ subscribeCurrentFlow/useEffect は削除（エラー原因を断つ）
+
+    // 検索UIは不要
+    const filteredFuncs = funcs;
 
     const assign = (slot: SlotId, funcId: FuncId) => {
         setBindings((prev) => ({ ...prev, [slot]: funcId }));
@@ -273,102 +315,104 @@ export function WiiBindingsEditor() {
     };
 
     const onDropSlot = (slot: SlotId) => (e: React.DragEvent) => {
-		e.preventDefault();
-		const payload = getTransfer(e);
-		if (!payload) return;
+        e.preventDefault();
+        const payload = getTransfer(e);
+        if (!payload) return;
 
-		if (payload.kind === "func") {
-			setBindings((prev) => ({ ...prev, [slot]: payload.funcId }));
-			return;
-		}
-		if (payload.kind === "slot") {
-			if (payload.slotId === slot) return;
-			setBindings((prev) => {
-				const next = { ...prev };
-				const tmp = next[payload.slotId];
-				next[payload.slotId] = next[slot];
-				next[slot] = tmp;
-				return next;
-			});
-		}
-	};
+        if (payload.kind === "func") {
+            setBindings((prev) => ({ ...prev, [slot]: payload.funcId }));
+            return;
+        }
+        if (payload.kind === "slot") {
+            if (payload.slotId === slot) return;
+            setBindings((prev) => {
+                const next = { ...prev };
+                const tmp = next[payload.slotId];
+                next[payload.slotId] = next[slot];
+                next[slot] = tmp;
+                return next;
+            });
+        }
+    };
 
     return (
-	<div
-		style={{
-			display: "grid",
-			gridTemplateColumns: "1fr 420px",
-			gap: 16,
-			alignItems: "start",
-		}}
-	>
-		{/* 左：SVG + 11スロット */}
-		<div style={{ border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden", background: "#fff" }}>
-			<svg
-				viewBox="0 0 3500 3500"
-				style={{ width: "100%", height: "82vh", display: "block", background: "#fafafa" }}
+			<div
+				style={{
+					display: "grid",
+					gridTemplateColumns: "1fr 420px",
+					gap: 10,
+					alignItems: "start",
+				}}
 			>
-				<image href="/WiiRemoteButtonBindDefault.svg" x={0} y={0} width={3500} height={3500} preserveAspectRatio="xMidYMid meet" />
+				{/* 左：SVG + 11スロット */}
+				<div style={{ border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden", background: "transparent" }}>
+					<svg
+						viewBox="800 500 2000 2400"
+						style={{ width: "100%", height: "82vh", display: "block", background: "#fff" }}
+					>
+						<image href="/WiiRemoteButtonBindDefault.svg" x={0} y={0} width={3500} height={3500} preserveAspectRatio="xMidYMid meet" />
 
-				{(Object.keys(SLOTS_RECT) as SlotId[]).map((slot) => {
-					const r = SLOTS_RECT[slot];
-					const f = bindings[slot];
-					const pad = 10;
-					const blockX = r.x + pad;
-					const blockY = r.y + pad;
-					const blockW = r.w - pad * 2;
-					const blockH = r.h - pad * 2;
+						{(Object.keys(SLOTS_RECT) as SlotId[]).map((slot) => {
+							const r = SLOTS_RECT[slot];
+							const f = bindings[slot];
+							const pad = 10;
+							const blockX = r.x + pad;
+							const blockY = r.y + pad;
+							const blockW = r.w - pad * 2;
+							const blockH = r.h - pad * 2;
 
-					return (
-						<g
-							key={slot}
-							onDragOver={(e) => {
-								e.preventDefault();
-								e.dataTransfer.dropEffect = "move";
-							}}
-							onDrop={onDropSlot(slot)}
-							style={{ cursor: "pointer" }}
-						>
-							<rect
-								x={r.x}
-								y={r.y}
-								width={r.w}
-								height={r.h}
-								rx={26}
-								ry={26}
-								fill="rgba(255,255,255,0.92)"
-								stroke="#111827"
+							return (
+								<g
+									key={slot}
+									onDragOver={(e) => {
+										e.preventDefault();
+										e.dataTransfer.dropEffect = "move";
+									}}
+									onDrop={onDropSlot(slot)}
+									style={{ cursor: "pointer" }}
+								>
+									<rect
+										x={r.x}
+										y={r.y}
+										width={r.w}
+										height={r.h}
+										rx={26}
+										ry={26}
+										fill="rgba(255,255,255,0.92)"
+										stroke="#111827"
+									/>
+
+									<g
+										// @ts-ignore
+										draggable={true}
+										onDragStart={(e) => setTransfer(e, { kind: "slot", slotId: slot })}
+										style={{ pointerEvents: "all" }}
+									>
+										<rect
+											x={blockX}
+											y={blockY}
+										width={blockW}
+										height={blockH}
+										rx={18}
+										fill="#111827"
+										opacity={0.92}
+										// @ts-ignore
+										draggable={true}
+										onDragStart={(e) => setTransfer(e, { kind: "slot", slotId: slot })}
 							/>
-
-							<g
-								// @ts-ignore
-								draggable={true}
-								onDragStart={(e) => setTransfer(e, { kind: "slot", slotId: slot })}
-								style={{ pointerEvents: "all" }}
-							>
-								<rect
-									x={blockX}
-									y={blockY}
-								width={blockW}
-								height={blockH}
-								rx={18}
-								fill="#111827"
-								opacity={0.92}
-								// @ts-ignore
-								draggable={true}
-								onDragStart={(e) => setTransfer(e, { kind: "slot", slotId: slot })}
-							/>
-								<text
-									x={blockX + 18}
-									y={blockY + blockH / 2}
-								fontSize={44}
-								fill="#ffffff"
-								dominantBaseline="middle"
-								pointerEvents="none"
-								style={{ userSelect: "none" }}
+										{mounted ? (
+											<text
+												x={blockX + 18}
+												y={blockY + blockH / 2}
+											fontSize={44}
+											fill="#ffffff"
+											dominantBaseline="middle"
+											pointerEvents="none"
+											style={{ userSelect: "none" }}
 							>
 								{funcLabel(f)}
 							</text>
+										) : null}
 							</g>
 						</g>
 					);
@@ -377,54 +421,117 @@ export function WiiBindingsEditor() {
 		</div>
 
 		{/* 右：機能ブロック一覧 */}
-		<div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, background: "#fff" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13 }}>機能ブロック</div>
-                    <div style={{ fontSize: 12, color: "#6b7280" }}>{filteredFuncs.length} 件</div>
-                </div>
+		<div
+			style={{
+				border: "1px solid #e5e7eb",
+				borderRadius: 12,
+				padding: 12,
+				background: "#fff",
+				height: "82vh",
+				overflow: "hidden",
+				display: "flex",
+				flexDirection: "column",
+			}}
+		>
+			<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+				<div style={{ fontWeight: 700, fontSize: 13 }}>機能ブロック</div>
+				<div style={{ fontSize: 12, color: "#6b7280" }}>{filteredFuncs.length} 件</div>
+			</div>
 
-                <input
-                    value={funcQuery}
-                    onChange={(e) => setFuncQuery(e.target.value)}
-                    placeholder="検索（例: next / case / clap）"
-                    style={{
-                        width: "100%",
-                        padding: "8px 10px",
-                        border: "1px solid #e5e7eb",
-                        borderRadius: 10,
-                        fontSize: 13,
-                        marginBottom: 10,
-                    }}
-                />
+			<div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+				<button
+					onClick={onSave}
+					disabled={!isDirty}
+					style={{
+						height: 32,
+						padding: "0 12px",
+						borderRadius: 10,
+						border: "1px solid #111827",
+						background: isDirty ? "#111827" : "#e5e7eb",
+						color: isDirty ? "#fff" : "#6b7280",
+						fontWeight: 800,
+						cursor: isDirty ? "pointer" : "not-allowed",
+					}}
+				>
+					保存
+				</button>
+				<button
+					onClick={onResetToDefault}
+					style={{
+						height: 32,
+						padding: "0 12px",
+						borderRadius: 10,
+						border: "1px solid #e5e7eb",
+						background: "#fff",
+						color: "#111827",
+						fontWeight: 700,
+						cursor: "pointer",
+					}}
+				>
+					デフォルト
+				</button>
+				<button
+					onClick={reloadFromStorage}
+					style={{
+						height: 32,
+						padding: "0 12px",
+						borderRadius: 10,
+						border: "1px solid #e5e7eb",
+						background: "#fff",
+						color: "#111827",
+						fontWeight: 700,
+						cursor: "pointer",
+					}}
+					title="保存済みの設定を再読み込み"
+				>
+					再読込
+				</button>
+				<div style={{ marginLeft: "auto", fontSize: 12, color: isDirty ? "#b45309" : "#16a34a" }}>
+					{isDirty ? "未保存" : "保存済み"}
+				</div>
+			</div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    {filteredFuncs.map((f) => (
-                        <div
-                            key={f}
-                            draggable
-                            onDragStart={(e) => setTransfer(e, { kind: "func", funcId: f })}
-                            style={{
-                                border: "1px solid #111827",
-                                borderRadius: 12,
-                                padding: "10px 12px",
-                                background: "#fff",
-                                userSelect: "none",
-                                cursor: "grab",
-                                fontSize: 14,
-                                fontWeight: 600,
-                                letterSpacing: 0.2,
-                            }}
-                            title="ドラッグして割り当て"
-                        >
-                            {funcLabel(f)}
-                        </div>
-                    ))}
-                </div>
-
-                <div style={{ marginTop: 12, fontSize: 12, color: "#6b7280" }}>
-                    CASE は最大 9（A〜I）。後で「フローの最大分岐数」から自動で増減させます。
-                </div>
-            </div>
-        </div>
-    );
+			<div
+				style={{
+					display: "grid",
+					gridTemplateColumns: "repeat(6, 1fr)",
+					gap: 6,
+					flex: 1,
+					minHeight: 0,
+					overflow: "auto",
+				}}
+			>
+				{filteredFuncs.map((f) => (
+					<div
+						key={f}
+						draggable
+						onDragStart={(e) => setTransfer(e, { kind: "func", funcId: f })}
+						style={{
+							border: "1px solid #111827",
+							borderRadius: 12,
+							padding: "0 6px",
+							background: "#111827",
+							color: "#fff",
+							userSelect: "none",
+							cursor: "grab",
+							fontSize: 12,
+							fontWeight: 800,
+							height: 36,
+							display: "flex",
+							alignItems: "center",
+							justifyContent: "center",
+							letterSpacing: 0.2,
+							overflow: "hidden",
+							whiteSpace: "nowrap",
+							textOverflow: "ellipsis",
+						}}
+						title="ドラッグして割り当て"
+					>
+						{funcLabel(f)}
+					</div>
+				))}
+			</div>
+		</div>
+	</div>
+	);
 }

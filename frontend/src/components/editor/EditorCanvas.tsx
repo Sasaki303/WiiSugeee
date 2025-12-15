@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ReactFlow, {
-	Background,
 	Controls,
 	MiniMap,
 	ReactFlowProvider,
@@ -12,6 +11,7 @@ import ReactFlow, {
 	useEdgesState,
 	useNodesState,
 	useReactFlow,
+	useStore,
 	type Connection,
 	type Edge,
 	type Node,
@@ -31,9 +31,7 @@ import {
 import { clearAllAssetBlobs, putAssetBlob } from "@/lib/idbAssets";
 import { saveProjectAsZip, loadProjectFromZip, loadProjectFromZipFile } from "@/lib/projectArchive";
 import { createAssetMeta } from "@/lib/projectFolder";
-import { WiiRemoteBinder } from "@/components/editor/WiiRemoteBinder";
-import type { ButtonBindings } from "@/lib/buttonBindings";
-import Link from "next/link";
+import { setCurrentFlow } from "@/lib/currentProjectStore";
 
 function hashString(input: string): string {
 	// djb2
@@ -56,6 +54,41 @@ function computeFlowHash(flow: SerializedFlow): string {
 }
 
 const EMPTY_FLOW_HASH = computeFlowHash({ version: 1, assets: [], nodes: [], edges: [] });
+
+function StarBackground() {
+	// ReactFlowのパン/ズームに追従
+	const [tx, ty, zoom] = useStore((s) => s.transform);
+
+	// もともとの <Background /> のデフォルト感に合わせる
+	const gap = 25;
+	const outer = 1.2;
+	const inner = 0.6;
+	const cx = gap / 2;
+	const cy = gap / 2;
+	// 4つの尖りはouter、辺は内側(inner)へ湾曲
+	const starPath = `M ${cx} ${cy - outer} Q ${cx + inner} ${cy - inner} ${cx + outer} ${cy} Q ${cx + inner} ${cy + inner} ${cx} ${cy + outer} Q ${cx - inner} ${cy + inner} ${cx - outer} ${cy} Q ${cx - inner} ${cy - inner} ${cx} ${cy - outer} Z`;
+
+	return (
+		<svg
+			className="react-flow__background"
+			aria-hidden="true"
+			style={{ width: "100%", height: "100%", position: "absolute", inset: 0, pointerEvents: "none" }}
+		>
+			<defs>
+				<pattern
+					id="rf-star-bg"
+					patternUnits="userSpaceOnUse"
+					width={gap}
+					height={gap}
+					patternTransform={`translate(${tx} ${ty}) scale(${zoom})`}
+				>
+					<path d={starPath} fill="#aaa" />
+				</pattern>
+			</defs>
+			<rect width="100%" height="100%" fill="url(#rf-star-bg)" />
+		</svg>
+	);
+}
 
 async function pdfToThumbnails(file: File): Promise<Array<{ page: number; dataUrl?: string }>> {
 	const arrayBuffer = await file.arrayBuffer();
@@ -136,8 +169,39 @@ async function videoToThumbnailDataUrl(file: File): Promise<string | undefined> 
 	}
 }
 
+async function imageToThumbnailDataUrl(file: File): Promise<string | undefined> {
+	const url = URL.createObjectURL(file);
+	try {
+		const img = document.createElement("img");
+		img.decoding = "async";
+		img.src = url;
+		await new Promise<void>((resolve, reject) => {
+			img.onload = () => resolve();
+			img.onerror = () => reject(new Error("画像の読み込みに失敗しました"));
+		});
+
+		const iw = img.naturalWidth;
+		const ih = img.naturalHeight;
+		if (!iw || !ih) return undefined;
+
+		const targetWidth = 240;
+		const scale = targetWidth / iw;
+		const canvas = document.createElement("canvas");
+		canvas.width = targetWidth;
+		canvas.height = Math.max(1, Math.floor(ih * scale));
+		const ctx = canvas.getContext("2d");
+		if (!ctx) return undefined;
+		ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+		// エディタ表示用なので低画質でOK
+		return canvas.toDataURL("image/jpeg", 0.6);
+	} finally {
+		URL.revokeObjectURL(url);
+	}
+}
+
 function flowFromState(nodes: Node<SlideNodeData>[], edges: Edge[], assets: ProjectAsset[]): SerializedFlow {
-	return {
+	const flow: SerializedFlow = {
 		version: 1,
 		assets,
 		nodes: nodes.map((node) => ({
@@ -153,6 +217,11 @@ function flowFromState(nodes: Node<SlideNodeData>[], edges: Edge[], assets: Proj
 			label: typeof edge.label === "string" ? edge.label : undefined,
 		})),
 	};
+
+	// 追加：エディタが生成した最新flowを「現在プロジェクト」として保持
+	setCurrentFlow(flow);
+
+	return flow;
 }
 
 function stateFromFlow(flow: SerializedFlow): { nodes: Node<SlideNodeData>[]; edges: Edge[] } {
@@ -175,7 +244,7 @@ function stateFromFlow(flow: SerializedFlow): { nodes: Node<SlideNodeData>[]; ed
 function InnerEditor() {
 	const router = useRouter();
 	const wrapperRef = useRef<HTMLDivElement | null>(null);
-	const { setViewport, getViewport } = useReactFlow();
+	const { setViewport, getViewport, setCenter } = useReactFlow();
 	const [nodes, setNodes, onNodesChange] = useNodesState<SlideNodeData>([]);
 	const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 	const [assets, setAssets] = useState<ProjectAsset[]>([]);
@@ -328,20 +397,6 @@ function InnerEditor() {
 		[selectedEdge, setEdges],
 	);
 
-	const updateSelectedNodeBindings = useCallback(
-		(nextBindings: ButtonBindings) => {
-			if (!selectedNode) return;
-			setNodes((prev) =>
-				prev.map((n) =>
-					n.id === selectedNode.id
-						? { ...n, data: { ...n.data, bindings: nextBindings } }
-						: n,
-				),
-			);
-		},
-		[selectedNode, setNodes],
-	);
-
 	const importFiles = useCallback(
 		async (files: FileList | File[]) => {
 			const fileArray = Array.from(files);
@@ -394,6 +449,31 @@ function InnerEditor() {
 						}
 
 						newlyAddedNodes.push(...pdfNodes);
+						rowY += 220;
+						continue;
+					}
+
+					if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+						const assetId = nanoid();
+						await putAssetBlob(assetId, file);
+						newlyAddedAssets.push(createAssetMeta("image", name, assetId));
+
+						let thumbnailDataUrl: string | undefined;
+						try {
+							thumbnailDataUrl = await imageToThumbnailDataUrl(file);
+						} catch {
+							thumbnailDataUrl = undefined;
+						}
+
+						newlyAddedNodes.push({
+							id: nanoid(),
+							type: "slide",
+							position: { x: baseX, y: rowY },
+							data: {
+								label: `IMG: ${name}`,
+								asset: { kind: "image", assetId, fileName: name, thumbnailDataUrl },
+							},
+						});
 						rowY += 220;
 						continue;
 					}
@@ -509,7 +589,7 @@ function InnerEditor() {
 	const onImportClick = useCallback(async () => {
 		const input = document.createElement("input");
 		input.type = "file";
-		input.accept = ".pdf,.mp4";
+		input.accept = ".pdf,.mp4,.png,.jpg,.jpeg";
 		input.multiple = true;
 		input.onchange = async () => {
 			if (!input.files?.length) return;
@@ -539,6 +619,25 @@ function InnerEditor() {
 		router.push("/present?auto=1&from=editor");
 	}, [router]);
 
+	const goSettings = useCallback(() => {
+		router.push("/settings");
+	}, [router]);
+
+	const iconStyle: React.CSSProperties = {
+		width: 16,
+		height: 16,
+		display: "inline-block",
+		flex: "0 0 auto",
+	};
+
+	const buttonStyle: React.CSSProperties = {
+		display: "inline-flex",
+		alignItems: "center",
+		gap: 6,
+		height: 32,
+		padding: "0 10px",
+	};
+
 	return (
 		<div
 			ref={wrapperRef}
@@ -549,32 +648,69 @@ function InnerEditor() {
 			<div
 				style={{
 					display: "flex",
-					gap: 12,
-					padding: 12,
+					gap: 8,
+					padding: 8,
 					borderBottom: "1px solid #eee",
 					alignItems: "center",
 				}}
 			>
-				<button onClick={onHomeClick}>ホームに戻る</button>
-				<button onClick={goPresent}>再生</button>
-				<Link href="/settings" style={{ fontSize: 13 }}>
-					設定（ボタン割り当て）
-				</Link>
-				<button onClick={onImportClick} disabled={isImporting}>
-					{isImporting ? "取込中..." : "PDF/MP4 取込 (D&D可)"}
+				<button onClick={onHomeClick} style={buttonStyle} aria-label="ホームに戻る">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={iconStyle}>
+						<path d="M3 10.5L12 3l9 7.5" />
+						<path d="M5 10v10h14V10" />
+					</svg>
+					ホーム
 				</button>
-				<button onClick={addSlideNode}>ノード追加</button>
-				<button onClick={deleteSelected} disabled={selectedNodeIds.length + selectedEdgeIds.length === 0}>
+				<button onClick={goPresent} style={buttonStyle} aria-label="再生">
+					<svg viewBox="0 0 24 24" fill="currentColor" style={iconStyle}>
+						<path d="M8 5v14l11-7z" />
+					</svg>
+					再生
+				</button>
+				<button onClick={goSettings} style={buttonStyle} aria-label="設定">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={iconStyle}>
+						<path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
+						<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-1.41 3.41h-.2a2 2 0 0 1-1.41-.59l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06A2 2 0 0 1 3 18.07v-.2a2 2 0 0 1 .59-1.41l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H2.4a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 0 1 5.02 3h.2a2 2 0 0 1 1.41.59l.06.06a1.65 1.65 0 0 0 1.82.33h0A1.65 1.65 0 0 0 10 2.49V2.4a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06A2 2 0 0 1 20.41 5.02v.2a2 2 0 0 1-.59 1.41l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1h.09a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+					</svg>
+					設定
+				</button>
+				<button onClick={onImportClick} disabled={isImporting} style={buttonStyle} aria-label="素材取り込み">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={iconStyle}>
+						<path d="M12 21V9" />
+						<path d="M7 14l5-5 5 5" />
+						<path d="M5 3h14v6H5z" />
+					</svg>
+					{isImporting ? "取込中..." : "素材取り込み (D&D可)"}
+				</button>
+				<button
+					onClick={deleteSelected}
+					disabled={selectedNodeIds.length + selectedEdgeIds.length === 0}
+					style={buttonStyle}
+					aria-label="選択削除"
+				>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={iconStyle}>
+						<path d="M3 6h18" />
+						<path d="M8 6V4h8v2" />
+						<path d="M6 6l1 16h10l1-16" />
+					</svg>
 					選択削除
 				</button>
-				<button onClick={onSaveProject}>プロジェクト保存</button>
-				<button onClick={onLoadProject}>プロジェクト読み込み</button>
+				<button onClick={onSaveProject} style={buttonStyle} aria-label="プロジェクト保存">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={iconStyle}>
+						<path d="M12 3v12" />
+						<path d="M7 10l5 5 5-5" />
+						<path d="M5 21h14" />
+					</svg>
+					保存
+				</button>
 				{isDirty ? (
 					<div style={{ fontSize: 12, color: "#b45309" }}>未保存</div>
 				) : (
 					<div style={{ fontSize: 12, color: "#16a34a" }}>保存済み</div>
 				)}
-				<div style={{ marginLeft: "auto", fontSize: 12, color: "#666" }}>ローカル自動保存: ON</div>
+				<div style={{ marginLeft: "auto", fontSize: 12, color: "#666" }}>
+					ローカル自動保存: ON
+				</div>
 			</div>
 
 			{showLeaveWarning ? (
@@ -626,6 +762,7 @@ function InnerEditor() {
 						onConnect={onConnect}
 						onSelectionChange={onSelectionChange}
 						nodeTypes={nodeTypes}
+						minZoom={0.05}
 						panOnScroll
 						panOnScrollMode={PanOnScrollMode.Free}
 						zoomOnScroll={false}
@@ -633,8 +770,14 @@ function InnerEditor() {
 						panOnDrag={[1, 2]}
 						fitView
 					>
-						<Background />
-						<MiniMap />
+						<StarBackground />
+						<MiniMap
+							position="bottom-right"
+							onClick={(_, pos) => {
+								const vp = getViewport();
+								setCenter(pos.x, pos.y, { zoom: vp.zoom });
+							}}
+						/>
 						<Controls />
 					</ReactFlow>
 				</div>
