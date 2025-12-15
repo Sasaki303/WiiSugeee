@@ -59,7 +59,7 @@ async function readBlobFile(dir: FileSystemDirectoryHandle, name: string): Promi
 	return file;
 }
 
-export function createAssetMeta(kind: "pdf" | "video", originalFileName: string, assetId: string): ProjectAsset {
+export function createAssetMeta(kind: "pdf" | "video" | "image", originalFileName: string, assetId: string): ProjectAsset {
 	const safe = sanitizeFileName(originalFileName);
 	return {
 		id: assetId,
