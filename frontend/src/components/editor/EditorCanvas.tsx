@@ -610,7 +610,7 @@ function InnerEditor() {
 	}, [clearAndGoHome, isDirty]);
 
 	const goPresent = useCallback(() => {
-		router.push("/present?auto=1&from=editor");
+		router.push("/present?from=editor");
 	}, [router]);
 
 	const iconStyle: React.CSSProperties = {

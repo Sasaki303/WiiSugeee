@@ -7,8 +7,6 @@ import { getAssetBlob } from "@/lib/idbAssets";
 import { useWiiController, type WiiState } from "@/hooks/useWiiController";
 import { ReactionOverlay } from "@/components/presenter/ReactionOverlay"; // 追加
 
-type Mode = "idle" | "playing";
-
 function PdfSlide(props: {
 	assetId: string;
 	page: number;
@@ -199,12 +197,13 @@ export function PresenterView() {
 	// Wiiリモコンの状態を取得
 	const { wiiState, pressed, wiiConnected } = useWiiController();
 
-	const [mode, setMode] = useState<Mode>("idle");
 	const [flow, setFlow] = useState<SerializedFlow | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
-	const [startedWithWii, setStartedWithWii] = useState(false);
+	const [hadWiiConnection, setHadWiiConnection] = useState(false);
 	const pdfDocCacheRef = useRef<Map<string, Promise<any>>>(new Map());
+
+	const isPlaying = flow != null && currentNodeId != null;
 
 	const getOrLoadPdfDocument = useCallback(async (assetId: string) => {
 		const cached = pdfDocCacheRef.current.get(assetId);
@@ -242,6 +241,24 @@ export function PresenterView() {
 	const currentNode = useMemo(() =>
 		flow?.nodes.find((n) => n.id === currentNodeId),
 		[flow, currentNodeId]);
+
+	useEffect(() => {
+		const loaded = loadFromLocalStorage();
+		if (!loaded || loaded.nodes.length === 0) {
+			setError("データが見つかりません。Editorで作成してください。");
+			setFlow(null);
+			setCurrentNodeId(null);
+			return;
+		}
+		setError(null);
+		setFlow(loaded);
+		const startNode = loaded.nodes.find((n) => n.data.label === "Start") || loaded.nodes[0];
+		setCurrentNodeId(startNode.id);
+	}, []);
+
+	useEffect(() => {
+		if (wiiConnected) setHadWiiConnection(true);
+	}, [wiiConnected]);
 
 	const outgoingEdges = useMemo(() => {
 		if (!flow || !currentNodeId) return [];
@@ -342,32 +359,13 @@ export function PresenterView() {
 		}
 	}, [flow, currentNodeId, navigateTo]);
 
-	// 再生開始
-	const onPlay = useCallback(() => {
-		if (!wiiConnected) {
-			setError("Wiiリモコンが接続されていません。");
-			return;
-		}
-		const loaded = loadFromLocalStorage();
-		if (!loaded || loaded.nodes.length === 0) {
-			setError("データが見つかりません。Editorで作成してください。");
-			return;
-		}
-		setFlow(loaded);
-		// Startラベルがあるノード、なければ先頭
-		const startNode = loaded.nodes.find(n => n.data.label === "Start") || loaded.nodes[0];
-		setCurrentNodeId(startNode.id);
-		setStartedWithWii(true);
-		setMode("playing");
-	}, [wiiConnected]);
-
 	// ★追加: キーボードでリアクションをデバッグする（N=One, M=Two）
 	const [debugEmitClap, setDebugEmitClap] = useState(false);
 	const [debugEmitLaugh, setDebugEmitLaugh] = useState(false);
 
 	// キーボード操作 (矢印キー対応 + ESCで戻る)
 	useEffect(() => {
-		if (mode !== "playing") return;
+		if (!isPlaying) return;
 
 		const handleKeyDown = (e: KeyboardEvent) => {
 			// ★追加: リアクション（N / M）
@@ -402,11 +400,11 @@ export function PresenterView() {
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [mode, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches]);
+	}, [isPlaying, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches]);
 
 	// --- Wiiリモコン ロジック ---
 	useEffect(() => {
-		if (mode !== "playing") return;
+		if (!isPlaying) return;
 
 		// 1. スライド進行 (十字キー)
 		if (pressed.Right && !hasMultipleBranches) nextSlide();
@@ -426,7 +424,7 @@ export function PresenterView() {
 		if (pressed.Two) {
 			console.log("😆 laugh");
 		}
-	}, [pressed, mode, nextSlide, prevSlide, branchTo, hasMultipleBranches]);
+	}, [pressed, isPlaying, nextSlide, prevSlide, branchTo, hasMultipleBranches]);
 
 	// --- 描画ロジック (IRセンサー & Aボタン) ---
 	useEffect(() => {
@@ -480,29 +478,6 @@ export function PresenterView() {
 	}, [wiiState, drawingPoints]);
 
 
-	// UIレンダリング
-	if (mode === "idle") {
-		return (
-			<main style={{ height: "100vh", display: "grid", placeItems: "center" }}>
-				<div style={{ textAlign: "center" }}>
-					<h1>Wii Presenter</h1>
-					<div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 10 }}>
-						<button onClick={goBack} style={{ padding: "10px 20px", fontSize: 16 }}>
-							{returnLabel}
-						</button>
-					<button onClick={onPlay} style={{ padding: "10px 20px", fontSize: 20 }}>
-						再生開始
-					</button>
-					</div>
-					<p style={{ marginTop: 20, color: '#666' }}>
-						Wiiリモコンを接続するか、キーボード(←/→)で操作できます。
-					</p>
-					{error && <p style={{ color: 'red' }}>{error}</p>}
-				</div>
-			</main>
-		);
-	}
-
 	return (
 		<main
 			ref={containerRef}
@@ -514,7 +489,7 @@ export function PresenterView() {
 				background: "black",
 			}}
 		>
-			{mode === "playing" && startedWithWii && !wiiConnected ? (
+			{isPlaying && hadWiiConnection && !wiiConnected ? (
 				<div
 					style={{
 						position: "absolute",
@@ -566,7 +541,7 @@ export function PresenterView() {
 						)}
 					</>
 				) : (
-					<div style={{ color: "white" }}>スライドデータがありません</div>
+					<div style={{ color: "white" }}>{error ?? "スライドデータがありません"}</div>
 				)}
 			</div>
 
