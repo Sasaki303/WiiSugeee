@@ -183,6 +183,7 @@ export function PresenterView() {
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const containerRef = useRef<HTMLDivElement | null>(null);
+	const isMouseDrawingRef = useRef(false);
 
 	const returnTo = useMemo(() => {
 		return searchParams.get("from") === "editor" ? "/editor" : "/";
@@ -231,8 +232,9 @@ export function PresenterView() {
 	}, []);
 
 	// お絵描き用の座標リスト
-	const [drawingPoints, setDrawingPoints] = useState<{ x: number; y: number }[]>([]);
+	const [drawingPoints, setDrawingPoints] = useState<Array<{ x: number; y: number } | null>>([]);
 	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const wasWiiADownRef = useRef(false);
 
 	// 連続遷移を防ぐためのクールタイム管理
 	const lastNavTime = useRef<number>(0);
@@ -364,6 +366,14 @@ export function PresenterView() {
 		if (mode !== "playing") return;
 
 		const handleKeyDown = (e: KeyboardEvent) => {
+			// 追加: 線をクリア (R)
+			if (e.key === "r" || e.key === "R") {
+				setDrawingPoints([]);
+				isMouseDrawingRef.current = false;
+				wasWiiADownRef.current = false;
+				return;
+			}
+
 			// ★追加: リアクション（N / M）
 			// 押しっぱなしで増殖しないように repeat を無視
 			if (!e.repeat) {
@@ -426,7 +436,7 @@ export function PresenterView() {
 	useEffect(() => {
 		const canvas = canvasRef.current;
 		const ctx = canvas?.getContext("2d");
-		if (!canvas || !ctx || !wiiState) return;
+		if (!canvas || !ctx) return;
 
 		// キャンバスサイズをウィンドウに合わせる
 		if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
@@ -444,16 +454,28 @@ export function PresenterView() {
 		ctx.lineJoin = "round";
 
 		if (drawingPoints.length > 1) {
-			ctx.beginPath();
-			ctx.moveTo(drawingPoints[0].x, drawingPoints[0].y);
-			for (let i = 1; i < drawingPoints.length; i++) {
-				ctx.lineTo(drawingPoints[i].x, drawingPoints[i].y);
+			let started = false;
+			for (const p of drawingPoints) {
+				if (!p) {
+					if (started) {
+						ctx.stroke();
+						started = false;
+					}
+					continue;
+				}
+				if (!started) {
+					ctx.beginPath();
+					ctx.moveTo(p.x, p.y);
+					started = true;
+				} else {
+					ctx.lineTo(p.x, p.y);
+				}
 			}
-			ctx.stroke();
+			if (started) ctx.stroke();
 		}
 
 		// IRポインター処理
-		if (wiiState.ir.length > 0) {
+		if (wiiState && wiiState.ir.length > 0) {
 			// IRの1点目を使用
 			const dot = wiiState.ir[0];
 			// 座標変換
@@ -467,7 +489,22 @@ export function PresenterView() {
 
 			// Aボタンを押している間、軌跡を追加
 			if (wiiState.buttons.A) {
-				setDrawingPoints(prev => [...prev, pos]);
+				setDrawingPoints((prev) => {
+					const next = prev.slice();
+					if (!wasWiiADownRef.current) {
+						// 前回の線と繋がらないように区切りを入れる
+						if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
+					}
+					next.push(pos);
+					return next;
+				});
+				wasWiiADownRef.current = true;
+			} else {
+				// 離したタイミングで区切る
+				if (wasWiiADownRef.current) {
+					wasWiiADownRef.current = false;
+					setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
+				}
 			}
 		}
 
@@ -500,6 +537,41 @@ export function PresenterView() {
 	return (
 		<main
 			ref={containerRef}
+			onMouseDown={(e) => {
+				if (mode !== "playing") return;
+				if (e.button !== 0) return;
+				// UI(ボタン等)操作は邪魔しない
+				const el = e.target as HTMLElement | null;
+				if (el && el.closest("button, a, input, textarea, select")) return;
+				e.preventDefault();
+				isMouseDrawingRef.current = true;
+				setDrawingPoints((prev) => {
+					const next = prev.slice();
+					if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
+					next.push({ x: e.clientX, y: e.clientY });
+					return next;
+				});
+			}}
+			onMouseMove={(e) => {
+				if (mode !== "playing") return;
+				if (!isMouseDrawingRef.current) return;
+				e.preventDefault();
+				setDrawingPoints((prev) => {
+					const last = prev[prev.length - 1];
+					if (last && Math.abs(last.x - e.clientX) + Math.abs(last.y - e.clientY) < 2) return prev;
+					return [...prev, { x: e.clientX, y: e.clientY }];
+				});
+			}}
+			onMouseUp={() => {
+				if (!isMouseDrawingRef.current) return;
+				isMouseDrawingRef.current = false;
+				setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
+			}}
+			onMouseLeave={() => {
+				if (!isMouseDrawingRef.current) return;
+				isMouseDrawingRef.current = false;
+				setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
+			}}
 			style={{
 				position: "relative",
 				width: "100vw",
