@@ -19,6 +19,10 @@ export type WiiState = {
 	ir: { x: number; y: number }[];
 };
 
+type WiiServerMessage =
+	| { type: "status"; connected: boolean }
+	| WiiState;
+
 const EMPTY_BUTTONS: WiiState["buttons"] = {
 	A: false,
 	B: false,
@@ -75,6 +79,7 @@ function keyToButton(key: string): keyof WiiState["buttons"] | null {
 
 export function useWiiController() {
 	const [wiiState, setWiiState] = useState<WiiState | null>(null);
+	const [wiiConnected, setWiiConnected] = useState(false);
 
 	// 「このフレームで押された」情報（Wii + キーボード合成）
 	const [pressed, setPressed] = useState<Partial<WiiState["buttons"]>>({});
@@ -127,8 +132,14 @@ export function useWiiController() {
 
 		ws.onmessage = (event) => {
 			try {
-				const data = JSON.parse(event.data) as WiiState;
+				const msg = JSON.parse(event.data) as WiiServerMessage;
+				if (msg && typeof msg === "object" && "type" in msg && (msg as any).type === "status") {
+					setWiiConnected(!!(msg as any).connected);
+					return;
+				}
+				const data = msg as WiiState;
 				const now = performance.now();
+				setWiiConnected(true);
 
 				// Wii側の「押された瞬間」検知
 				if (prevButtonsRef.current) {
@@ -152,6 +163,10 @@ export function useWiiController() {
 
 		ws.onerror = () => {
 			// Wii未接続でもキーボードで動かすため、ここでは落とさない
+		};
+
+		ws.onclose = () => {
+			setWiiConnected(false);
 		};
 
 		return () => {
@@ -218,5 +233,6 @@ export function useWiiController() {
 	return {
 		wiiState,
 		pressed,
+		wiiConnected,
 	};
 }
