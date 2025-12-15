@@ -31,6 +31,9 @@ import {
 import { clearAllAssetBlobs, putAssetBlob } from "@/lib/idbAssets";
 import { saveProjectAsZip, loadProjectFromZip, loadProjectFromZipFile } from "@/lib/projectArchive";
 import { createAssetMeta } from "@/lib/projectFolder";
+import { WiiRemoteBinder } from "@/components/editor/WiiRemoteBinder";
+import type { ButtonBindings } from "@/lib/buttonBindings";
+import Link from "next/link";
 
 function hashString(input: string): string {
 	// djb2
@@ -325,6 +328,20 @@ function InnerEditor() {
 		[selectedEdge, setEdges],
 	);
 
+	const updateSelectedNodeBindings = useCallback(
+		(nextBindings: ButtonBindings) => {
+			if (!selectedNode) return;
+			setNodes((prev) =>
+				prev.map((n) =>
+					n.id === selectedNode.id
+						? { ...n, data: { ...n.data, bindings: nextBindings } }
+						: n,
+				),
+			);
+		},
+		[selectedNode, setNodes],
+	);
+
 	const importFiles = useCallback(
 		async (files: FileList | File[]) => {
 			const fileArray = Array.from(files);
@@ -532,14 +549,17 @@ function InnerEditor() {
 			<div
 				style={{
 					display: "flex",
-					gap: 8,
-					padding: 8,
+					gap: 12,
+					padding: 12,
 					borderBottom: "1px solid #eee",
 					alignItems: "center",
 				}}
 			>
 				<button onClick={onHomeClick}>ホームに戻る</button>
 				<button onClick={goPresent}>再生</button>
+				<Link href="/settings" style={{ fontSize: 13 }}>
+					設定（ボタン割り当て）
+				</Link>
 				<button onClick={onImportClick} disabled={isImporting}>
 					{isImporting ? "取込中..." : "PDF/MP4 取込 (D&D可)"}
 				</button>
@@ -554,9 +574,7 @@ function InnerEditor() {
 				) : (
 					<div style={{ fontSize: 12, color: "#16a34a" }}>保存済み</div>
 				)}
-				<div style={{ marginLeft: "auto", fontSize: 12, color: "#666" }}>
-					ローカル自動保存: ON
-				</div>
+				<div style={{ marginLeft: "auto", fontSize: 12, color: "#666" }}>ローカル自動保存: ON</div>
 			</div>
 
 			{showLeaveWarning ? (

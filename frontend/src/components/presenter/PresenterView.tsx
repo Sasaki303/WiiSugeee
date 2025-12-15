@@ -6,6 +6,7 @@ import { loadFromLocalStorage, type SerializedFlow } from "@/lib/presentation";
 import { getAssetBlob } from "@/lib/idbAssets";
 import { useWiiController, type WiiState } from "@/hooks/useWiiController";
 import { ReactionOverlay } from "@/components/presenter/ReactionOverlay"; // 追加
+import { mergeBindings, type BindingAction } from "@/lib/buttonBindings";
 
 type Mode = "idle" | "playing";
 
@@ -204,13 +205,17 @@ export function PresenterView() {
 		flow?.nodes.find((n) => n.id === currentNodeId),
 		[flow, currentNodeId]);
 
+	// 現在のノードから出ているエッジ
 	const outgoingEdges = useMemo(() => {
 		if (!flow || !currentNodeId) return [];
 		return flow.edges.filter((e) => e.source === currentNodeId);
 	}, [flow, currentNodeId]);
 
+	// 「分岐がある」= 2本以上（要件）
+	const hasMultipleBranches = outgoingEdges.length >= 2;
+
+	// 分岐オプション（1..9 キーに割当）
 	const branchOptions = useMemo(() => {
-		// 1-9 の数字で選べる分岐
 		const options: Array<{ key: string; target: string }> = [];
 		const used = new Set<string>();
 
@@ -226,7 +231,6 @@ export function PresenterView() {
 			}
 		}
 
-		// ラベルに番号がない場合は、配列順で 1..n を割り当て
 		for (const edge of outgoingEdges) {
 			if (options.length >= 9) break;
 			const nextKey = String(options.length + 1);
@@ -238,42 +242,25 @@ export function PresenterView() {
 		return options;
 	}, [outgoingEdges]);
 
-	const hasMultipleBranches = outgoingEdges.length >= 2;
-
-	// ノード移動処理
 	const navigateTo = useCallback((nodeId: string) => {
-		// クールタイムチェック (500ms以内の連続遷移は無視)
 		const now = Date.now();
 		if (now - lastNavTime.current < 500) return;
 		lastNavTime.current = now;
 
 		setCurrentNodeId(nodeId);
-		setDrawingPoints([]); // スライドが変わったら線を消す
+		setDrawingPoints([]);
 	}, []);
 
 	// 次へ（ロジック改良版）
 	const nextSlide = useCallback(() => {
 		if (!flow || !currentNodeId) return;
-		// 分岐が複数ある場合は、数字選択を優先する
+		// 要件: 分岐があるときは NEXT では進まない（数字/CASEで選ばせる）
+		if (hasMultipleBranches) return;
 		const edges = flow.edges.filter((e) => e.source === currentNodeId);
-		if (edges.length >= 2) return;
-
-		// 現在のノードから出ているエッジをすべて取得
-		// (上で取得済み)
-
 		if (edges.length === 0) return;
-
-		// 優先順位付け
-		// 1. ラベルがないエッジ (デフォルトルート)
-		// 2. ラベルが "next" のエッジ
-		// 3. それ以外 (最初に見つかったもの)
-		const targetEdge =
-			edges.find(e => !e.label || e.label.trim() === "") ||
-			edges.find(e => e.label === "next") ||
-			edges[0];
-
+		const targetEdge = edges.find((e) => !e.label || e.label.trim() === "") || edges.find((e) => e.label === "next") || edges[0];
 		if (targetEdge) navigateTo(targetEdge.target);
-	}, [flow, currentNodeId, navigateTo]);
+	}, [flow, currentNodeId, navigateTo, hasMultipleBranches]);
 
 	const branchByNumberKey = useCallback(
 		(key: string) => {
@@ -284,24 +271,56 @@ export function PresenterView() {
 		[branchOptions, hasMultipleBranches, navigateTo],
 	);
 
-	// 前へ（逆順検索）
 	const prevSlide = useCallback(() => {
 		if (!flow || !currentNodeId) return;
-		// 自分に向かっているエッジを探して戻る（簡易実装）
-		const edge = flow.edges.find(e => e.target === currentNodeId);
+		const edge = flow.edges.find((e) => e.target === currentNodeId);
 		if (edge) navigateTo(edge.source);
 	}, [flow, currentNodeId, navigateTo]);
 
-	// 分岐処理（エッジのラベルで検索）
-	const branchTo = useCallback((keywords: string[]) => {
-		if (!flow || !currentNodeId) return;
-		const edges = flow.edges.filter(e => e.source === currentNodeId);
-		const target = edges.find(e => keywords.some(k => e.label?.includes(k)));
-		if (target) {
-			console.log("分岐しました:", target.label);
-			navigateTo(target.target);
-		}
-	}, [flow, currentNodeId, navigateTo]);
+	// --- プロジェクト全体バインドを適用してアクション実行 ---
+	const effectiveProjectBindings = useMemo(() => {
+		return mergeBindings(flow?.projectBindings);
+	}, [flow?.projectBindings]);
+
+	const runAction = useCallback(
+		(a: BindingAction) => {
+			switch (a.type) {
+				case "none":
+					return;
+				case "next":
+					nextSlide();
+					return;
+				case "prev":
+					prevSlide();
+					return;
+				case "branch": {
+					// 既存の BranchAction は A/B/HOME までだが、
+					// 分岐があるときは 1..9 で選ぶ仕様に寄せる。
+					// A=1, B=2 ... とする。
+					if (!hasMultipleBranches) return;
+					const map: Record<string, string> = { A: "1", B: "2", HOME: "3" };
+					const k = map[a.kind];
+					if (k) branchByNumberKey(k);
+					return;
+				}
+				case "reaction":
+					// ReactionOverlay が pressed.One/Two を見ているので、ここでは何もしない
+					return;
+			}
+		},
+		[nextSlide, prevSlide, branchByNumberKey, hasMultipleBranches],
+	);
+
+	useEffect(() => {
+		if (mode !== "playing") return;
+
+		// そのフレームで押されたボタンだけ処理
+		(Object.keys(pressed) as Array<keyof WiiState["buttons"]>).forEach((btn) => {
+			if (!pressed[btn]) return;
+			const act = effectiveProjectBindings[btn] ?? { type: "none" };
+			runAction(act);
+		});
+	}, [pressed, mode, effectiveProjectBindings, runAction]);
 
 	// 再生開始
 	const onPlay = useCallback(() => {
@@ -364,25 +383,8 @@ export function PresenterView() {
 	useEffect(() => {
 		if (mode !== "playing") return;
 
-		// 1. スライド進行 (十字キー)
-		if (pressed.Right && !hasMultipleBranches) nextSlide();
-		if (pressed.Left) prevSlide();
-
-		// 2. 分岐 (Plus / Minus / Home)
-		if (pressed.Plus) branchTo(["+", "plus", "Aルート"]);
-		if (pressed.Minus) branchTo(["-", "minus", "Bルート"]);
-		if (pressed.Home) branchTo(["home", "top", "戻る"]);
-
-		// 3. エフェクト (1 / 2)
-		// alert は UI をブロックしてプレゼンの邪魔になるので削除。
-		// 表示は <ReactionOverlay> 側に任せる。
-		if (pressed.One) {
-			console.log("👏 clap");
-		}
-		if (pressed.Two) {
-			console.log("😆 laugh");
-		}
-	}, [pressed, mode, nextSlide, prevSlide, branchTo, hasMultipleBranches]);
+		// 旧互換ロジックは削除（projectBindings の runAction に統一）
+	}, [mode]);
 
 	// --- 描画ロジック (IRセンサー & Aボタン) ---
 	useEffect(() => {
