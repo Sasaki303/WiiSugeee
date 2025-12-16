@@ -6,6 +6,7 @@ import { loadFromLocalStorage, type SerializedFlow } from "@/lib/presentation";
 import { getAssetBlob } from "@/lib/idbAssets";
 import { useWiiController, type WiiState } from "@/hooks/useWiiController";
 import { ReactionOverlay } from "@/components/presenter/ReactionOverlay";
+import { WiiDebugPanel } from "@/components/presenter/WiiDebugPanel";
 import { formatAction, mergeBindings, type BindingAction } from "@/lib/buttonBindings";
 import { getProjectBindings } from "@/lib/currentProjectStore";
 import { WiiDisconnectPopup } from "@/components/presenter/WiiDisconnectPopup";
@@ -504,46 +505,6 @@ export function PresenterView() {
 		return false;
 	}, [pressed, effectiveProjectBindings, mode]);
 
-	// ★修正点: 以下の useMemo 3つを if (mode === "idle") の前に移動させます
-
-	const debugPressedButtons = useMemo(() => {
-		const on: string[] = [];
-		for (const [btn, isDown] of Object.entries(pressed) as Array<[string, unknown]>) {
-			if (isDown) on.push(btn);
-		}
-		return on.length ? on.join(", ") : "(none)";
-	}, [pressed]);
-
-	const debugBindingLines = useMemo(() => {
-		const entries = Object.entries(effectiveProjectBindings) as Array<[string, BindingAction | undefined]>;
-		entries.sort((a, b) => a[0].localeCompare(b[0]));
-		return entries.map(([btn, action]) => `${btn.padEnd(8)} → ${action ? formatAction(action) : "(unassigned)"}`);
-	}, [effectiveProjectBindings]);
-
-
-	// UIレンダリング
-	if (mode === "idle") {
-		return (
-			<main style={{ height: "100vh", display: "grid", placeItems: "center" }}>
-				<div style={{ textAlign: "center" }}>
-					<h1>Wii Presenter</h1>
-					<div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 10 }}>
-						<button onClick={goBack} style={{ padding: "10px 20px", fontSize: 16 }}>
-							{returnLabel}
-						</button>
-					<button onClick={onPlay} style={{ padding: "10px 20px", fontSize: 20 }}>
-						再生開始
-					</button>
-					</div>
-					<p style={{ marginTop: 20, color: '#666' }}>
-						Wiiリモコンを接続するか、キーボード(←/→)で操作できます。
-					</p>
-					{error && <p style={{ color: 'red' }}>{error}</p>}
-				</div>
-			</main>
-		);
-	}
-
     // ★修正前はこのあたりに useMemo がありましたが、上に移動しました
 
 	return (
@@ -606,41 +567,12 @@ export function PresenterView() {
 				style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
 			/>
 
-			{/* デバッグ情報 (右上・揺れ防止 + 割当表示) */}
-			<div
-				style={{
-					position: "absolute",
-					top: 20,
-					right: 20,
-					background: "rgba(0,0,0,0.82)",
-					color: "#d1fae5",
-					padding: "12px 14px",
-					borderRadius: 10,
-					fontSize: 14,
-					fontFamily:
-						"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-					zIndex: 9999,
-					pointerEvents: "none",
-					minWidth: 360,
-					whiteSpace: "pre",
-					lineHeight: 1.35,
-					border: "1px solid rgba(255,255,255,0.12)",
-				}}
-			>
-				<div style={{ fontWeight: 800, color: "#a7f3d0", marginBottom: 8 }}>Wii Debug</div>
-				<div style={{ color: "rgba(209,250,229,0.9)" }}>
-					Acc: X={String(wiiState?.accel.x ?? 0).padStart(3)} Y={String(wiiState?.accel.y ?? 0).padStart(3)} Z={String(
-						wiiState?.accel.z ?? 0,
-					).padStart(3)}
-				</div>
-				<div style={{ color: "rgba(209,250,229,0.9)" }}>IR : {wiiState?.ir.length ?? 0}</div>
-				<div style={{ color: "rgba(209,250,229,0.9)" }}>{`Btn: ${debugPressedButtons}`}</div>
-				<div style={{ margin: "10px 0", borderTop: "1px solid rgba(255,255,255,0.12)" }} />
-				<div style={{ fontWeight: 800, color: "#a7f3d0", marginBottom: 6 }}>Bindings (project)</div>
-				{debugBindingLines.map((line) => (
-					<div key={line}>{line}</div>
-				))}
-			</div>
+			{/* デバッグ情報 (右上) */}
+			<WiiDebugPanel
+				wiiState={wiiState}
+				pressed={pressed}
+				effectiveProjectBindings={effectiveProjectBindings}
+			/>
 
 			{/* 操作ガイド (左下) */}
 			<div style={{ position: "absolute", bottom: 20, left: 20, color: "rgba(255,255,255,0.5)", fontSize: 14, pointerEvents: "none" }}>
