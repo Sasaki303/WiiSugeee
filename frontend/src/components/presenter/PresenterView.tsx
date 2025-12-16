@@ -542,6 +542,7 @@ export function PresenterView() {
 			canvas.width = window.innerWidth;
 			canvas.height = window.innerHeight;
 		}
+
 		// 画面クリア
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -606,8 +607,6 @@ export function PresenterView() {
 			}
 		}
 	}, [wiiState, drawingPoints]);
-
-
 
 
 	return (
