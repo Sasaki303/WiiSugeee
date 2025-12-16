@@ -7,6 +7,7 @@ import { getAssetBlob } from "@/lib/idbAssets";
 import { useWiiController, type WiiState } from "@/hooks/useWiiController";
 import { ReactionOverlay } from "@/components/presenter/ReactionOverlay";
 import { formatAction, mergeBindings, type BindingAction } from "@/lib/buttonBindings";
+import { getProjectBindings } from "@/lib/currentProjectStore";
 
 type Mode = "idle" | "playing";
 
@@ -22,6 +23,7 @@ function PdfSlide(props: {
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const [size, setSize] = useState<{ w: number; h: number } | null>(null);
 	const [renderError, setRenderError] = useState<string | null>(null);
+	const renderTaskRef = useRef<any>(null); // ★追加: レンダリングタスクの参照を保持
 
 	useEffect(() => {
 		const el = wrapperRef.current;
@@ -44,6 +46,16 @@ function PdfSlide(props: {
 			const canvas = canvasRef.current;
 			if (!el || !canvas || !size || size.w === 0 || size.h === 0) return;
 
+			// ★追加: 既存のレンダリングをキャンセル
+			if (renderTaskRef.current) {
+				try {
+					renderTaskRef.current.cancel();
+				} catch (e) {
+					// キャンセル済みの場合は無視
+				}
+				renderTaskRef.current = null;
+			}
+
 			const pdf = await getOrLoadPdfDocument(assetId);
 			if (cancelled) return;
 			const pdfPage = await pdf.getPage(page);
@@ -64,10 +76,29 @@ function PdfSlide(props: {
 			ctx.setTransform(1, 0, 0, 1, 0, 0);
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-			await pdfPage.render({ canvasContext: ctx, canvas, viewport: renderViewport }).promise;
+			// ★修正: レンダリングタスクを保持し、キャンセル可能にする
+			try {
+				renderTaskRef.current = pdfPage.render({ canvasContext: ctx, canvas, viewport: renderViewport });
+				await renderTaskRef.current.promise;
+				renderTaskRef.current = null;
+			} catch (e: any) {
+				if (!cancelled && e.name !== "RenderingCancelledException") {
+					console.error("PDF rendering error:", e);
+					setRenderError(String(e));
+				}
+			}
 		})();
 		return () => {
 			cancelled = true;
+			// ★追加: コンポーネントのアンマウント時にレンダリングをキャンセル
+			if (renderTaskRef.current) {
+				try {
+					renderTaskRef.current.cancel();
+				} catch (e) {
+					// 既にキャンセル済みの場合は無視
+				}
+				renderTaskRef.current = null;
+			}
 		};
 	}, [assetId, getOrLoadPdfDocument, page, size]);
 
@@ -312,7 +343,17 @@ export function PresenterView() {
 			setError("データが見つかりません。Editorで作成してください。");
 			return;
 		}
-		setFlow(loaded);
+		
+		// ★修正: currentProjectStoreから最新のバインド設定を読み込む
+		const storedBindings = getProjectBindings();
+		
+		// バインド設定を適用
+		const flowWithBindings = storedBindings ? 
+			{ ...loaded, projectBindings: storedBindings } : loaded;
+		
+		console.log("PresenterView: Loading bindings", { storedBindings, flowWithBindings });
+		
+		setFlow(flowWithBindings);
 		// Startラベルがあるノード、なければ先頭
 		const startNode = loaded.nodes.find(n => n.data.label === "Start") || loaded.nodes[0];
 		setCurrentNodeId(startNode.id);
@@ -341,7 +382,12 @@ export function PresenterView() {
 	}, [mode, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches]);
 
 	const effectiveProjectBindings = useMemo(() => {
-		return mergeBindings(flow?.projectBindings);
+		const merged = mergeBindings(flow?.projectBindings);
+		console.log("PresenterView: effectiveProjectBindings updated", { 
+			flowBindings: flow?.projectBindings, 
+			merged 
+		});
+		return merged;
 	}, [flow]);
 
 	// --- Wiiリモコン ロジック ---
@@ -400,6 +446,30 @@ export function PresenterView() {
 		}
 		prevPressedRef.current = { ...(pressed as Record<string, boolean>) };
 	}, [pressed, mode, effectiveProjectBindings, runAction]);
+
+	// ★追加: リアクション検出（バインドベース）
+	const shouldEmitClap = useMemo(() => {
+		if (mode !== "playing") return false;
+		// 押されたボタンの中で、"clap" にバインドされているものがあるか？
+		for (const btn of Object.keys(pressed)) {
+			const isDown = (pressed as Record<string, boolean>)[btn];
+			if (!isDown) continue;
+			const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn];
+			if (act?.type === "reaction" && act.kind === "clap") return true;
+		}
+		return false;
+	}, [pressed, effectiveProjectBindings, mode]);
+
+	const shouldEmitLaugh = useMemo(() => {
+		if (mode !== "playing") return false;
+		for (const btn of Object.keys(pressed)) {
+			const isDown = (pressed as Record<string, boolean>)[btn];
+			if (!isDown) continue;
+			const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn];
+			if (act?.type === "reaction" && act.kind === "laugh") return true;
+		}
+		return false;
+	}, [pressed, effectiveProjectBindings, mode]);
 
 	// ★修正点: 以下の useMemo 3つを if (mode === "idle") の前に移動させます
 
@@ -461,8 +531,8 @@ export function PresenterView() {
 				</button>
 			</div>
 
-			{/* ★追加: リアクション（右下に重ねる） */}
-			<ReactionOverlay emitClap={!!pressed.One} emitLaugh={!!pressed.Two} />
+			{/* ★修正: リアクション（バインドベース） */}
+			<ReactionOverlay emitClap={shouldEmitClap} emitLaugh={shouldEmitLaugh} />
 
 			{/* ★修正: スライド表示エリア (全画面・余白なし・アスペクト比維持) */}
 			<div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
