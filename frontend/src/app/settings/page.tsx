@@ -1,9 +1,11 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { WiiBindingsEditor } from "@/components/settings/WiiBindingsEditor";
 
 export default function SettingsPage() {
+    const router = useRouter();
+
 	const buttonStyle: React.CSSProperties = {
 		display: "inline-flex",
 		alignItems: "center",
@@ -19,6 +21,11 @@ export default function SettingsPage() {
 		flex: "0 0 auto",
 	};
 
+    const sendRequestBack = (e: React.MouseEvent) => {
+        e.preventDefault();
+        window.dispatchEvent(new Event("wiibindings:requestBack"));
+    };
+
 	return (
 		<div style={{ width: "100%", height: "100vh", display: "flex", flexDirection: "column", fontFamily: "var(--font-geist-sans)" }}>
 			<div
@@ -30,14 +37,14 @@ export default function SettingsPage() {
 					alignItems: "center",
 				}}
 			>
-				<Link href="/editor" style={{ textDecoration: "none" }}>
+				<button onClick={sendRequestBack} style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}>
 					<span style={buttonStyle} aria-label="エディタに戻る">
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={iconStyle}>
 							<path d="M15 18l-6-6 6-6" />
 						</svg>
 						エディタに戻る
 					</span>
-				</Link>
+				</button>
 			</div>
 
 			<main style={{ padding: 16, minHeight: 0, overflow: "auto" }}>
@@ -47,7 +54,8 @@ export default function SettingsPage() {
 				<div style={{ fontSize: 12, opacity: 0.75, marginBottom: 12 }}>
 					右の機能ブロックをドラッグして、左のスロットへドロップして割り当てます。
 				</div>
-				<WiiBindingsEditor />
+
+				<WiiBindingsEditor onBack={() => router.push("/editor")} />
 			</main>
 		</div>
 	);

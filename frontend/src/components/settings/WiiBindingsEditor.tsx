@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { mergeBindings, type ButtonBindings } from "@/lib/buttonBindings";
-import { getProjectBindings, setProjectBindings } from "@/lib/projectBindingsStorage";
+import { getProjectBindings, setProjectBindings } from "@/lib/currentProjectStore";
 
 type SlotId = "A" | "B" | "PLUS" | "MINUS" | "HOME" | "ONE" | "TWO" | "UP" | "DOWN" | "LEFT" | "RIGHT";
 type FuncId =
@@ -262,7 +262,7 @@ function fromButtonBindings(bindings: ButtonBindings | undefined): Bindings {
 	};
 }
 
-export function WiiBindingsEditor() {
+export function WiiBindingsEditor(props: { onBack?: () => void }) {
     const [maxCase] = useState<number>(9);
     const funcs = useMemo(() => allFuncs(maxCase), [maxCase]);
 
@@ -277,14 +277,12 @@ export function WiiBindingsEditor() {
 
     const isDirty = useMemo(() => JSON.stringify(bindings) !== JSON.stringify(savedBindings), [bindings, savedBindings]);
 
-    const onSave = () => {
+    const onSave = useCallback(() => {
         setProjectBindings(toButtonBindings(bindings)); // localStorageへ保存
         setSavedBindings(bindings);
-    };
+    }, [bindings]);
 
-    const onResetToDefault = () => {
-        setBindings(DEFAULT_BINDINGS);
-    };
+    const onResetToDefault = () => setBindings(DEFAULT_BINDINGS);
 
     const reloadFromStorage = () => {
         const next = readStored(); // localStorageから再読込
@@ -292,10 +290,45 @@ export function WiiBindingsEditor() {
         setSavedBindings(next);
     };
 
+    // --- ★追加: 戻る確認モーダル（3択） ---
+    const [showBackModal, setShowBackModal] = useState(false);
+
+    const requestBack = useCallback(() => {
+        if (!isDirty) {
+            props.onBack?.();
+            return;
+        }
+        setShowBackModal(true);
+    }, [isDirty, props.onBack]);
+
+    // settings/page.tsx から window イベントで呼び出す
+    useEffect(() => {
+        const handler = () => requestBack();
+        window.addEventListener("wiibindings:requestBack", handler);
+        return () => window.removeEventListener("wiibindings:requestBack", handler);
+    }, [requestBack]);
+
+    const doSaveAndBack = useCallback(() => {
+        onSave();
+        setShowBackModal(false);
+        props.onBack?.();
+    }, [onSave, props.onBack]);
+
+    const doDiscardAndBack = useCallback(() => {
+        // 破棄＝保存済みに戻す
+        const next = readStored();
+        setBindings(next);
+        setSavedBindings(next);
+        setShowBackModal(false);
+        props.onBack?.();
+    }, [props.onBack]);
+
+    const doCancelBack = useCallback(() => {
+        setShowBackModal(false);
+    }, []);
+
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
-
-    // ✅ subscribeCurrentFlow/useEffect は削除（エラー原因を断つ）
 
     // 検索UIは不要
     const filteredFuncs = funcs;
@@ -336,83 +369,172 @@ export function WiiBindingsEditor() {
     };
 
     return (
-			<div
-				style={{
-					display: "grid",
-					gridTemplateColumns: "1fr 420px",
-					gap: 10,
-					alignItems: "start",
-				}}
-			>
-				{/* 左：SVG + 11スロット */}
-				<div style={{ border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden", background: "transparent" }}>
-					<svg
-						viewBox="800 500 2000 2400"
-						style={{ width: "100%", height: "82vh", display: "block", background: "#fff" }}
-					>
-						<image href="/WiiRemoteButtonBindDefault.svg" x={0} y={0} width={3500} height={3500} preserveAspectRatio="xMidYMid meet" />
+        <div
+            style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 420px",
+                gap: 10,
+                alignItems: "start",
+                position: "relative",
+            }}
+        >
+            {/* ★追加: 戻る確認モーダル */}
+            {showBackModal ? (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="未保存の変更があります"
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        zIndex: 40000,
+                        display: "grid",
+                        placeItems: "center",
+                        background: "rgba(0,0,0,0.55)",
+                        padding: 16,
+                    }}
+                    onClick={doCancelBack}
+                >
+                    <div
+                        style={{
+                            width: "min(520px, 92vw)",
+                            borderRadius: 14,
+                            background: "#fff",
+                            border: "1px solid #e5e7eb",
+                            boxShadow: "0 24px 90px rgba(0,0,0,0.25)",
+                            padding: 16,
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>変更が未保存です</div>
+                        <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, marginBottom: 14 }}>
+                            エディタに戻る前に、変更を保存しますか？
+                        </div>
 
-						{(Object.keys(SLOTS_RECT) as SlotId[]).map((slot) => {
-							const r = SLOTS_RECT[slot];
-							const f = bindings[slot];
-							const pad = 10;
-							const blockX = r.x + pad;
-							const blockY = r.y + pad;
-							const blockW = r.w - pad * 2;
-							const blockH = r.h - pad * 2;
+                        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                            <button
+                                onClick={doCancelBack}
+                                style={{
+                                    height: 34,
+                                    padding: "0 12px",
+                                    borderRadius: 10,
+                                    border: "1px solid #e5e7eb",
+                                    background: "#fff",
+                                    color: "#111827",
+                                    fontWeight: 700,
+                                    cursor: "pointer",
+                                }}
+                            >
+                                キャンセル
+                            </button>
 
-							return (
+                            <button
+                                onClick={doDiscardAndBack}
+                                style={{
+                                    height: 34,
+                                    padding: "0 12px",
+                                    borderRadius: 10,
+                                    border: "1px solid #e5e7eb",
+                                    background: "#fff",
+                                    color: "#b91c1c",
+                                    fontWeight: 800,
+                                    cursor: "pointer",
+                                }}
+                                title="保存せずに戻ります"
+                            >
+                                破棄して戻る
+                            </button>
+
+                            <button
+                                onClick={doSaveAndBack}
+                                style={{
+                                    height: 34,
+                                    padding: "0 12px",
+                                    borderRadius: 10,
+                                    border: "1px solid #111827",
+                                    background: "#111827",
+                                    color: "#fff",
+                                    fontWeight: 900,
+                                    cursor: "pointer",
+                                }}
+                                title="保存して戻ります"
+                            >
+                                保存して戻る
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
+            {/* 左：SVG + 11スロット */}
+            <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden", background: "transparent" }}>
+				<svg
+					viewBox="800 500 2000 2400"
+					style={{ width: "100%", height: "82vh", display: "block", background: "#fff" }}
+				>
+					<image href="/WiiRemoteButtonBindDefault.svg" x={0} y={0} width={3500} height={3500} preserveAspectRatio="xMidYMid meet" />
+
+					{(Object.keys(SLOTS_RECT) as SlotId[]).map((slot) => {
+						const r = SLOTS_RECT[slot];
+						const f = bindings[slot];
+						const pad = 10;
+						const blockX = r.x + pad;
+						const blockY = r.y + pad;
+						const blockW = r.w - pad * 2;
+						const blockH = r.h - pad * 2;
+
+						return (
+							<g
+								key={slot}
+								onDragOver={(e) => {
+									e.preventDefault();
+									e.dataTransfer.dropEffect = "move";
+								}}
+								onDrop={onDropSlot(slot)}
+								style={{ cursor: "pointer" }}
+							>
+								<rect
+									x={r.x}
+									y={r.y}
+									width={r.w}
+									height={r.h}
+									rx={26}
+									ry={26}
+									fill="rgba(255,255,255,0.92)"
+									stroke="#111827"
+								/>
+
 								<g
-									key={slot}
-									onDragOver={(e) => {
-										e.preventDefault();
-										e.dataTransfer.dropEffect = "move";
-									}}
-									onDrop={onDropSlot(slot)}
-									style={{ cursor: "pointer" }}
+									// @ts-ignore
+									draggable={true}
+									onDragStart={(e) => setTransfer(e, { kind: "slot", slotId: slot })}
+									style={{ pointerEvents: "all" }}
 								>
 									<rect
-										x={r.x}
-										y={r.y}
-										width={r.w}
-										height={r.h}
-										rx={26}
-										ry={26}
-										fill="rgba(255,255,255,0.92)"
-										stroke="#111827"
-									/>
-
-									<g
-										// @ts-ignore
-										draggable={true}
-										onDragStart={(e) => setTransfer(e, { kind: "slot", slotId: slot })}
-										style={{ pointerEvents: "all" }}
-									>
-										<rect
-											x={blockX}
-											y={blockY}
-										width={blockW}
-										height={blockH}
-										rx={18}
-										fill="#111827"
-										opacity={0.92}
-										// @ts-ignore
-										draggable={true}
-										onDragStart={(e) => setTransfer(e, { kind: "slot", slotId: slot })}
+										x={blockX}
+										y={blockY}
+									width={blockW}
+									height={blockH}
+									rx={18}
+									fill="#111827"
+									opacity={0.92}
+									// @ts-ignore
+									draggable={true}
+									onDragStart={(e) => setTransfer(e, { kind: "slot", slotId: slot })}
 							/>
-										{mounted ? (
-											<text
-												x={blockX + 18}
-												y={blockY + blockH / 2}
-											fontSize={44}
-											fill="#ffffff"
-											dominantBaseline="middle"
-											pointerEvents="none"
-											style={{ userSelect: "none" }}
+									{mounted ? (
+										<text
+											x={blockX + 18}
+											y={blockY + blockH / 2}
+										fontSize={44}
+										fill="#ffffff"
+										dominantBaseline="middle"
+										pointerEvents="none"
+										style={{ userSelect: "none" }}
 							>
 								{funcLabel(f)}
 							</text>
-										) : null}
+									) : null}
 							</g>
 						</g>
 					);
