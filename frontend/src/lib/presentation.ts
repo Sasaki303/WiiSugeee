@@ -1,3 +1,5 @@
+import type { ButtonBindings } from "@/lib/buttonBindings";
+
 export type ProjectAsset = {
 	id: string;
 	kind: "pdf" | "video" | "image";
@@ -29,12 +31,22 @@ export type AssetRef =
 export type SlideNodeData = {
 	label: string;
 	asset?: AssetRef;
+	/**
+	 * スライドごとの Wii ボタン割り当て。
+	 * 未設定の場合はデフォルト割り当てを適用する。
+	 */
+	bindings?: ButtonBindings;
 };
 
 export type SerializedFlow = {
 	version: 1;
 	assets?: ProjectAsset[];
 	viewport?: { x: number; y: number; zoom: number };
+	/**
+	 * プロジェクト全体の Wii ボタン割り当て。
+	 * 未設定の場合はデフォルト割り当てを適用する。
+	 */
+	projectBindings?: ButtonBindings;
 	nodes: Array<{
 		id: string;
 		type?: string;

@@ -22,6 +22,11 @@ function setWiiConnected(next: boolean) {
     if (isWiiConnected === next) return;
     isWiiConnected = next;
     broadcast({ type: 'status', connected: isWiiConnected });
+
+    // ★追加: 切断に遷移した瞬間をフロントへ通知（ポップアップ表示トリガー）
+    if (!isWiiConnected) {
+        broadcast({ type: 'wiiDisconnected', at: Date.now() });
+    }
 }
 
 wss.on('connection', (ws) => {
@@ -169,6 +174,11 @@ async function connectWiiRemote() {
 
     device.on('error', (err) => {
         console.error('Wii Remote disconnected:', err);
+
+        // ★追加: エラーハンドラを発火点として、必ずフロントへ切断イベントを送る
+        // （setWiiConnected(false) は state 変更時のみ送るため、保険としてここでも送る）
+        broadcast({ type: 'wiiDisconnected', at: Date.now(), reason: String(err) });
+
 		setWiiConnected(false);
         // ★追加: 切断されたらタイマーを止める
         if (keepAliveInterval) clearInterval(keepAliveInterval);
@@ -179,6 +189,9 @@ async function connectWiiRemote() {
 
     // ★追加: 正常クローズ時もタイマー停止
     device.on('close', () => {
+        // ★追加: closeも切断イベント発火点として通知
+        broadcast({ type: 'wiiDisconnected', at: Date.now(), reason: 'close' });
+
     		setWiiConnected(false);
          if (keepAliveInterval) clearInterval(keepAliveInterval);
     });

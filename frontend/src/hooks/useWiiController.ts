@@ -21,6 +21,7 @@ export type WiiState = {
 
 type WiiServerMessage =
 	| { type: "status"; connected: boolean }
+	| { type: "wiiDisconnected"; at?: number }
 	| WiiState;
 
 const EMPTY_BUTTONS: WiiState["buttons"] = {
@@ -80,6 +81,11 @@ function keyToButton(key: string): keyof WiiState["buttons"] | null {
 export function useWiiController() {
 	const [wiiState, setWiiState] = useState<WiiState | null>(null);
 	const [wiiConnected, setWiiConnected] = useState(false);
+	// ★追加: backendから来た切断イベントのタイムスタンプ（更新されるたびにポップアップを開く）
+	const [wiiDisconnectedAt, setWiiDisconnectedAt] = useState<number | null>(null);
+
+	// ★追加: 「一度でも正常に接続できていたか」を保持（接続失敗の誤爆防止）
+	const wasConnectedRef = useRef(false);
 
 	// 「このフレームで押された」情報（Wii + キーボード合成）
 	const [pressed, setPressed] = useState<Partial<WiiState["buttons"]>>({});
@@ -133,13 +139,30 @@ export function useWiiController() {
 		ws.onmessage = (event) => {
 			try {
 				const msg = JSON.parse(event.data) as WiiServerMessage;
-				if (msg && typeof msg === "object" && "type" in msg && (msg as any).type === "status") {
-					setWiiConnected(!!(msg as any).connected);
-					return;
+
+				if (msg && typeof msg === "object" && "type" in msg) {
+					const t = (msg as any).type;
+
+					if (t === "status") {
+						const connected = !!(msg as any).connected;
+						setWiiConnected(connected);
+						wasConnectedRef.current = connected; // ★追加
+						return;
+					}
+
+					if (t === "wiiDisconnected") {
+						setWiiConnected(false);
+						wasConnectedRef.current = false; // ★追加
+						setWiiDisconnectedAt(typeof (msg as any).at === "number" ? (msg as any).at : Date.now());
+						return;
+					}
 				}
+
 				const data = msg as WiiState;
 				const now = performance.now();
+
 				setWiiConnected(true);
+				wasConnectedRef.current = true; // ★追加: データが来ている=接続できている
 
 				// Wii側の「押された瞬間」検知
 				if (prevButtonsRef.current) {
@@ -161,12 +184,25 @@ export function useWiiController() {
 			}
 		};
 
+		// ★修正: 「接続中に切れた」場合だけ disconnect 扱いにする（接続失敗の誤爆防止）
 		ws.onerror = () => {
-			// Wii未接続でもキーボードで動かすため、ここでは落とさない
+			const wasConnected = wasConnectedRef.current;
+			setWiiConnected(false);
+			wasConnectedRef.current = false;
+
+			if (wasConnected) {
+				setWiiDisconnectedAt(Date.now());
+			}
 		};
 
 		ws.onclose = () => {
+			const wasConnected = wasConnectedRef.current;
 			setWiiConnected(false);
+			wasConnectedRef.current = false;
+
+			if (wasConnected) {
+				setWiiDisconnectedAt(Date.now());
+			}
 		};
 
 		return () => {
@@ -234,5 +270,6 @@ export function useWiiController() {
 		wiiState,
 		pressed,
 		wiiConnected,
+		wiiDisconnectedAt,
 	};
 }
