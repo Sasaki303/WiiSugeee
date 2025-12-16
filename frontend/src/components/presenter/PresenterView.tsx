@@ -182,6 +182,18 @@ export function PresenterView() {
 	const searchParams = useSearchParams();
 	const containerRef = useRef<HTMLDivElement | null>(null);
 
+	const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
+	const playSound = useCallback((key: "q" | "w" | "e") => {
+		const a = soundboardRef.current[key];
+		if (!a) return;
+		try {
+			a.currentTime = 0;
+			void a.play();
+		} catch (err) {
+			console.warn("sound play failed", key, err);
+		}
+	}, []);
+
 	const returnTo = useMemo(() => {
 		return searchParams.get("from") === "editor" ? "/editor" : "/";
 	}, [searchParams]);
@@ -204,6 +216,26 @@ export function PresenterView() {
 	const pdfDocCacheRef = useRef<Map<string, Promise<any>>>(new Map());
 
 	const isPlaying = flow != null && currentNodeId != null;
+
+	useEffect(() => {
+		const q = new Audio("https://www.myinstants.com/media/sounds/nice-shot-wii-sports_DJJ0VOz.mp3");
+		const w = new Audio("https://www.myinstants.com/media/sounds/crowdaw.mp3");
+		const e = new Audio("https://www.myinstants.com/media/sounds/crowdoh.mp3");
+		q.preload = "auto";
+		w.preload = "auto";
+		e.preload = "auto";
+		soundboardRef.current = { q, w, e };
+		return () => {
+			for (const a of [q, w, e]) {
+				try {
+					a.pause();
+				} catch {
+					// ignore
+				}
+			}
+			soundboardRef.current = {};
+		};
+	}, []);
 
 	const getOrLoadPdfDocument = useCallback(async (assetId: string) => {
 		const cached = pdfDocCacheRef.current.get(assetId);
@@ -368,6 +400,21 @@ export function PresenterView() {
 		if (!isPlaying) return;
 
 		const handleKeyDown = (e: KeyboardEvent) => {
+			if (!e.repeat) {
+				if (e.key === "q" || e.key === "Q") {
+					playSound("q");
+					return;
+				}
+				if (e.key === "w" || e.key === "W") {
+					playSound("w");
+					return;
+				}
+				if (e.key === "e" || e.key === "E") {
+					playSound("e");
+					return;
+				}
+			}
+
 			// ★追加: リアクション（N / M）
 			// 押しっぱなしで増殖しないように repeat を無視
 			if (!e.repeat) {
@@ -400,7 +447,7 @@ export function PresenterView() {
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [isPlaying, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches]);
+	}, [isPlaying, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches, playSound]);
 
 	// --- Wiiリモコン ロジック ---
 	useEffect(() => {
