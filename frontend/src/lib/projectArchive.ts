@@ -1,6 +1,8 @@
 import JSZip from "jszip";
 import { getAssetBlob, putAssetBlob } from "@/lib/idbAssets";
 import { saveToLocalStorage, tryParseFlowJson, type SerializedFlow } from "@/lib/presentation";
+import { getProjectBindings, getCurrentProjectId } from "@/lib/currentProjectStore";
+import { saveProjectBindings } from "@/lib/projectBindingsStorage";
 
 async function showSaveFilePickerCompat(): Promise<FileSystemFileHandle | null> {
 	const w = window as unknown as {
@@ -63,10 +65,16 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 export async function saveProjectAsZip(flow: SerializedFlow): Promise<void> {
-	const zip = new JSZip();
-	zip.file("project.json", JSON.stringify(flow, null, 2));
+	// ★追加: localStorageから最新のボタンバインド設定を取得してflowに含める
+	const latestBindings = getProjectBindings();
+	const flowWithBindings: SerializedFlow = latestBindings
+		? { ...flow, projectBindings: latestBindings }
+		: flow;
 
-	const assets = flow.assets ?? [];
+	const zip = new JSZip();
+	zip.file("project.json", JSON.stringify(flowWithBindings, null, 2));
+
+	const assets = flowWithBindings.assets ?? [];
 	for (const asset of assets) {
 		const blob = await getAssetBlob(asset.id);
 		if (!blob) throw new Error(`アセットが見つかりません: ${asset.fileName}`);
@@ -98,6 +106,13 @@ export async function loadProjectFromZipFile(file: File): Promise<SerializedFlow
 		if (!entry) throw new Error(`assets/${asset.storedFileName} が見つかりません`);
 		const blob = await entry.async("blob");
 		await putAssetBlob(asset.id, blob);
+	}
+
+	// ★追加: ボタンバインド情報をlocalStorageに保存
+	if (parsed.projectBindings) {
+		const projectId = getCurrentProjectId();
+		saveProjectBindings(projectId, parsed.projectBindings);
+		console.log("ボタンバインド設定を復元しました:", projectId, parsed.projectBindings);
 	}
 
 	saveToLocalStorage(parsed);
