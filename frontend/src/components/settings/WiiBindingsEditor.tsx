@@ -25,7 +25,11 @@ type FuncId =
 	| "CASE_F"
 	| "CASE_G"
 	| "CASE_H"
-	| "CASE_I";
+	| "CASE_I"
+	| "PAINT"
+	| "SHOT"
+	| "OH"
+	| "UXO";
 
 type Bindings = Record<SlotId, FuncId>;
 
@@ -106,6 +110,14 @@ function funcLabel(f: FuncId): string {
             return "A";
         case "B":
             return "B";
+        case "PAINT":
+            return "PAINT🎨";
+        case "SHOT":
+            return "SHOT🔊";
+        case "OH":
+            return "Oh...🔊";
+        case "UXO":
+            return "Uxo~🔊";
         default:
             return f;
     }
@@ -149,7 +161,7 @@ function getTransfer(e: React.DragEvent): DragPayload | null {
 }
 
 function allFuncs(maxCase: number): FuncId[] {
-    const base: FuncId[] = ["NEXT", "PREV", "HOME", "CLAP", "SMILE", "PLUS", "MINUS", "UP", "DOWN", "A", "B"];
+    const base: FuncId[] = ["NEXT", "PREV", "HOME", "CLAP", "SMILE", "PLUS", "MINUS", "UP", "DOWN", "A", "B", "PAINT", "SHOT", "OH", "UXO"];
     const cases: FuncId[] = ["CASE_A", "CASE_B", "CASE_C", "CASE_D", "CASE_E", "CASE_F", "CASE_G", "CASE_H", "CASE_I"].slice(
         0,
         Math.max(0, Math.min(9, maxCase)),
@@ -191,6 +203,14 @@ function toAction(funcId: FuncId): ButtonBindings[keyof ButtonBindings] {
 			return { type: "branchIndex", index: 8 };
 		case "CASE_I":
 			return { type: "branchIndex", index: 9 };
+		case "PAINT":
+			return { type: "paint" };
+		case "SHOT":
+			return { type: "sound", kind: "shot" };
+		case "OH":
+			return { type: "sound", kind: "oh" };
+		case "UXO":
+			return { type: "sound", kind: "uxo" };
 		case "UP":
 		case "DOWN":
 		case "A":
@@ -223,6 +243,12 @@ function fromAction(a: ButtonBindings[keyof ButtonBindings] | undefined, fallbac
 	if (a.type === "next") return "NEXT";
 	if (a.type === "prev") return "PREV";
 	if (a.type === "reaction") return a.kind === "clap" ? "CLAP" : "SMILE";
+	if (a.type === "paint") return "PAINT";
+	if (a.type === "sound") {
+		if (a.kind === "shot") return "SHOT";
+		if (a.kind === "oh") return "OH";
+		if (a.kind === "uxo") return "UXO";
+	}
 	if (a.type === "branchIndex") {
 		const map: Record<number, FuncId> = {
 			1: "CASE_A",

@@ -8,7 +8,9 @@ export type BindingAction =
 	| { type: "prev" }
 	| { type: "branch"; kind: "A" | "B" | "HOME" }
 	| { type: "branchIndex"; index: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 }
-	| { type: "reaction"; kind: "clap" | "laugh" };
+	| { type: "reaction"; kind: "clap" | "laugh" }
+	| { type: "paint" }
+	| { type: "sound"; kind: "shot" | "oh" | "uxo" };
 
 export type ButtonBindings = Partial<Record<WiiButton, BindingAction>>;
 
@@ -43,6 +45,17 @@ export function formatAction(a: BindingAction): string {
 			return `分岐 ${a.index}`;
 		case "reaction":
 			return a.kind === "clap" ? "拍手" : "笑い";
+		case "paint":
+			return "ペイント🎨";
+		case "sound":
+			switch (a.kind) {
+				case "shot":
+					return "SHOT🔊";
+				case "oh":
+					return "Oh...🔊";
+				case "uxo":
+					return "Uxo~🔊";
+			}
 	}
 }
 

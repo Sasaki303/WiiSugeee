@@ -514,12 +514,21 @@ export function PresenterView() {
 				case "reaction":
 					// ReactionOverlay が pressed.One/Two を見ているので、ここでは何もしない
 					return;
+				case "paint":
+					// shouldPaintで別途処理するので、ここでは何もしない
+					return;
+				case "sound":
+					// 音声再生処理
+					if (a.kind === "shot") playSound("q");
+					else if (a.kind === "oh") playSound("e");
+					else if (a.kind === "uxo") playSound("w");
+					return;
 				case "none":
 				default:
 					return;
             }
         },
-        [nextSlide, prevSlide, branchByNumberKey, hasMultipleBranches],
+        [nextSlide, prevSlide, branchByNumberKey, hasMultipleBranches, playSound],
     );
 
     // ★修正: Wiiリモコンのボタン処理（isPlayingがtrueの時のみ動作）
@@ -564,7 +573,18 @@ export function PresenterView() {
         return false;
     }, [pressed, effectiveProjectBindings, isPlaying]);
 
-    // --- 描画ロジック (IRセンサー & Aボタン) ---
+    const shouldPaint = useMemo(() => {
+        if (!isPlaying) return false;
+        for (const btn of Object.keys(pressed)) {
+            const isDown = (pressed as Record<string, boolean>)[btn];
+            if (!isDown) continue;
+            const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn];
+            if (act?.type === "paint") return true;
+        }
+        return false;
+    }, [pressed, effectiveProjectBindings, isPlaying]);
+
+    // --- 描画ロジック (IRセンサー & PAINTボタン) ---
     useEffect(() => {
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext("2d");
@@ -619,8 +639,8 @@ export function PresenterView() {
 			ctx.arc(pos.x, pos.y, 10, 0, Math.PI * 2);
 			ctx.fill();
 
-			// Aボタンを押している間、軌跡を追加
-			if (wiiState.buttons.A) {
+			// PAINTバインドされたボタンを押している間、軌跡を追加
+			if (shouldPaint) {
 				setDrawingPoints((prev) => {
 					const next = prev.slice();
 					if (!wasWiiADownRef.current) {
@@ -639,7 +659,7 @@ export function PresenterView() {
 				}
 			}
         }
-    }, [wiiState, drawingPoints]);
+    }, [wiiState, drawingPoints, shouldPaint]);
 
 
     return (
