@@ -182,52 +182,50 @@ function mapIrToScreen(irX: number, irY: number, screenW: number, screenH: numbe
 }
 
 export function PresenterView() {
-	const router = useRouter();
-	const searchParams = useSearchParams();
-	const containerRef = useRef<HTMLDivElement | null>(null);
-	const isMouseDrawingRef = useRef(false);
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const isMouseDrawingRef = useRef(false);
 
-	const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
-	const playSound = useCallback((key: "q" | "w" | "e") => {
-		const a = soundboardRef.current[key];
-		if (!a) return;
-		try {
-			a.currentTime = 0;
-			void a.play();
-		} catch (err) {
-			console.warn("sound play failed", key, err);
-		}
-	}, []);
+    const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
+    const playSound = useCallback((key: "q" | "w" | "e") => {
+        const a = soundboardRef.current[key];
+        if (!a) return;
+        try {
+            a.currentTime = 0;
+            void a.play();
+        } catch (err) {
+            console.warn("sound play failed", key, err);
+        }
+    }, []);
 
-	const returnTo = useMemo(() => {
-		return searchParams.get("from") === "editor" ? "/editor" : "/";
-	}, [searchParams]);
+    const returnTo = useMemo(() => {
+        return searchParams.get("from") === "editor" ? "/editor" : "/";
+    }, [searchParams]);
 
-	const returnLabel = useMemo(() => {
-		return returnTo === "/editor" ? "エディタに戻る" : "ホームに戻る";
-	}, [returnTo]);
+    const returnLabel = useMemo(() => {
+        return returnTo === "/editor" ? "エディタに戻る" : "ホームに戻る";
+    }, [returnTo]);
 
-	const goBack = useCallback(() => {
-		router.push(returnTo);
-	}, [router, returnTo]);
+    const goBack = useCallback(() => {
+        router.push(returnTo);
+    }, [router, returnTo]);
 
-	// Wiiリモコンの状態を取得
-	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt } = useWiiController();
+    // Wiiリモコンの状態を取得
+    const { wiiState, pressed, wiiConnected, wiiDisconnectedAt } = useWiiController();
 
-	const [flow, setFlow] = useState<SerializedFlow | null>(null);
-	const [error, setError] = useState<string | null>(null);
-	const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
-	const [startedWithWii, setStartedWithWii] = useState(false);
-	// ★再生開始時刻（開始後の切断のみポップアップ対象にする）
-	const [playingSince, setPlayingSince] = useState<number>(0);
-	const [mode, setMode] = useState<"idle" | "playing">("idle");
+    const [flow, setFlow] = useState<SerializedFlow | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
+    const [startedWithWii, setStartedWithWii] = useState(false);
+    const [playingSince, setPlayingSince] = useState<number>(0);
 
-	const pdfDocCacheRef = useRef<Map<string, Promise<any>>>(new Map());
+    const pdfDocCacheRef = useRef<Map<string, Promise<any>>>(new Map());
 
-	// Presenterは常に flow/currentNodeId がある前提で動かしているので、それを playing 判定にする
-	const isPlaying = flow != null && currentNodeId != null;
+    // ★修正: 常にplaying状態として扱う（flow/currentNodeIdがあれば再生中）
+    const isPlaying = flow != null && currentNodeId != null;
 
-	useEffect(() => {
+    useEffect(() => {
 		const q = new Audio("https://www.myinstants.com/media/sounds/nice-shot-wii-sports_DJJ0VOz.mp3");
 		const w = new Audio("https://www.myinstants.com/media/sounds/crowdaw.mp3");
 		const e = new Audio("https://www.myinstants.com/media/sounds/crowdoh.mp3");
@@ -247,69 +245,85 @@ export function PresenterView() {
 		};
 	}, []);
 
-	const getOrLoadPdfDocument = useCallback(async (assetId: string) => {
-		const cached = pdfDocCacheRef.current.get(assetId);
-		if (cached) return await cached;
+    const getOrLoadPdfDocument = useCallback(async (assetId: string) => {
+        const cached = pdfDocCacheRef.current.get(assetId);
+        if (cached) return await cached;
 
-		const promise = (async () => {
-			const blob = await getAssetBlob(assetId);
-			if (!blob) throw new Error("PDFアセットが見つかりません (IndexedDB)");
-			const arrayBuffer = await blob.arrayBuffer();
-			const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-			pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+        const promise = (async () => {
+            const blob = await getAssetBlob(assetId);
+            if (!blob) throw new Error("PDFアセットが見つかりません (IndexedDB)");
+            const arrayBuffer = await blob.arrayBuffer();
+            const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+            pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 				"pdfjs-dist/legacy/build/pdf.worker.min.mjs",
 				import.meta.url,
 			).toString();
-			return await pdfjs.getDocument({ data: arrayBuffer }).promise;
-		})();
+            return await pdfjs.getDocument({ data: arrayBuffer }).promise;
+        })();
 
-		pdfDocCacheRef.current.set(assetId, promise);
-		try {
-			return await promise;
-		} catch (e) {
-			pdfDocCacheRef.current.delete(assetId);
-			throw e;
-		}
-	}, []);
+        pdfDocCacheRef.current.set(assetId, promise);
+        try {
+            return await promise;
+        } catch (e) {
+            pdfDocCacheRef.current.delete(assetId);
+            throw e;
+        }
+    }, []);
 
-	// お絵描き用の座標リスト
-	const [drawingPoints, setDrawingPoints] = useState<Array<{ x: number; y: number } | null>>([]);
-	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const wasWiiADownRef = useRef(false);
+    // お絵描き用の座標リスト
+    const [drawingPoints, setDrawingPoints] = useState<Array<{ x: number; y: number } | null>>([]);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const wasWiiADownRef = useRef(false);
 
-	// 連続遷移を防ぐためのクールタイム管理
-	const lastNavTime = useRef<number>(0);
+    // 連続遷移を防ぐためのクールタイム管理
+    const lastNavTime = useRef<number>(0);
 
-	// 現在のノードデータ
-	const currentNode = useMemo(() =>
+    // 現在のノードデータ
+    const currentNode = useMemo(() =>
 		flow?.nodes.find((n) => n.id === currentNodeId),
 		[flow, currentNodeId]);
 
-	useEffect(() => {
-		const loaded = loadFromLocalStorage();
-		if (!loaded || loaded.nodes.length === 0) {
-			setError("データが見つかりません。Editorで作成してください。");
-			setFlow(null);
-			setCurrentNodeId(null);
-			return;
-		}
-		setError(null);
-		setFlow(loaded);
-		const startNode = loaded.nodes.find((n) => n.data.label === "Start") || loaded.nodes[0];
-		setCurrentNodeId(startNode.id);
-	}, []);
+    // ★修正: 初回マウント時に自動的にプレゼンテーションを開始
+    useEffect(() => {
+        const loaded = loadFromLocalStorage();
+        if (!loaded || loaded.nodes.length === 0) {
+            setError("データが見つかりません。Editorで作成してください。");
+            setFlow(null);
+            setCurrentNodeId(null);
+            return;
+        }
+        
+        // バインド設定を読み込み
+        const storedBindings = getProjectBindings();
+        const flowWithBindings = storedBindings ? 
+            { ...loaded, projectBindings: storedBindings } : loaded;
+        
+        console.log("PresenterView: Auto-starting presentation with bindings", { storedBindings, flowWithBindings });
+        
+        setError(null);
+        setFlow(flowWithBindings);
+        
+        // Startノードから開始
+        const startNode = loaded.nodes.find((n) => n.data.label === "Start") || loaded.nodes[0];
+        setCurrentNodeId(startNode.id);
+        
+        // Wii接続状態を記録
+        setStartedWithWii(!!wiiConnected);
+        setPlayingSince(Date.now());
+    }, []); // ★空の依存配列で初回のみ実行
 
-	useEffect(() => {
-		if (wiiConnected) setStartedWithWii(true);
-	}, [wiiConnected]);
+    // ★修正: wiiConnectedが変化したら記録を更新
+    useEffect(() => {
+        if (wiiConnected) setStartedWithWii(true);
+    }, [wiiConnected]);
 
-	const outgoingEdges = useMemo(() => {
-		if (!flow || !currentNodeId) return [];
-		return flow.edges.filter((e) => e.source === currentNodeId);
-	}, [flow, currentNodeId]);
+    const outgoingEdges = useMemo(() => {
+        if (!flow || !currentNodeId) return [];
+        return flow.edges.filter((e) => e.source === currentNodeId);
+    }, [flow, currentNodeId]);
 
-	const branchOptions = useMemo(() => {
-		// 1-9 の数字で選べる分岐
+    const branchOptions = useMemo(() => {
+        // 1-9 の数字で選べる分岐
 		const options: Array<{ key: string; target: string }> = [];
 		const used = new Set<string>();
 
@@ -335,24 +349,24 @@ export function PresenterView() {
 		}
 
 		return options;
-	}, [outgoingEdges]);
+    }, [outgoingEdges]);
 
-	const hasMultipleBranches = outgoingEdges.length >= 2;
+    const hasMultipleBranches = outgoingEdges.length >= 2;
 
-	// ノード移動処理
-	const navigateTo = useCallback((nodeId: string) => {
-		// クールタイムチェック (500ms以内の連続遷移は無視)
+    // ノード移動処理
+    const navigateTo = useCallback((nodeId: string) => {
+        // クールタイムチェック (500ms以内の連続遷移は無視)
 		const now = Date.now();
 		if (now - lastNavTime.current < 500) return;
 		lastNavTime.current = now;
 
 		setCurrentNodeId(nodeId);
 		setDrawingPoints([]); // スライドが変わったら線を消す
-	}, []);
+    }, []);
 
-	// 次へ（ロジック改良版）
-	const nextSlide = useCallback(() => {
-		if (!flow || !currentNodeId) return;
+    // 次へ（ロジック改良版）
+    const nextSlide = useCallback(() => {
+        if (!flow || !currentNodeId) return;
 		// 分岐が複数ある場合は、数字選択を優先する
 		const edges = flow.edges.filter((e) => e.source === currentNodeId);
 		if (edges.length >= 2) return;
@@ -372,9 +386,9 @@ export function PresenterView() {
 			edges[0];
 
 		if (targetEdge) navigateTo(targetEdge.target);
-	}, [flow, currentNodeId, navigateTo]);
+    }, [flow, currentNodeId, navigateTo]);
 
-	const branchByNumberKey = useCallback(
+    const branchByNumberKey = useCallback(
 		(key: string) => {
 			if (!hasMultipleBranches) return;
 			const opt = branchOptions.find((o) => o.key === key);
@@ -383,61 +397,35 @@ export function PresenterView() {
 		[branchOptions, hasMultipleBranches, navigateTo],
 	);
 
-	// 前へ（逆順検索）
-	const prevSlide = useCallback(() => {
-		if (!flow || !currentNodeId) return;
+    // 前へ（逆順検索）
+    const prevSlide = useCallback(() => {
+        if (!flow || !currentNodeId) return;
 		// 自分に向かっているエッジを探して戻る（簡易実装）
 		const edge = flow.edges.find(e => e.target === currentNodeId);
 		if (edge) navigateTo(edge.source);
-	}, [flow, currentNodeId, navigateTo]);
+    }, [flow, currentNodeId, navigateTo]);
 
-	// 分岐処理（エッジのラベルで検索）
-	const branchTo = useCallback((keywords: string[]) => {
-		if (!flow || !currentNodeId) return;
+    // 分岐処理（エッジのラベルで検索）
+    const branchTo = useCallback((keywords: string[]) => {
+        if (!flow || !currentNodeId) return;
 		const edges = flow.edges.filter(e => e.source === currentNodeId);
 		const target = edges.find(e => keywords.some(k => e.label?.includes(k)));
 		if (target) {
 			console.log("分岐しました:", target.label);
 			navigateTo(target.target);
 		}
-	}, [flow, currentNodeId, navigateTo]);
+    }, [flow, currentNodeId, navigateTo]);
 
-	// 再生開始（現在のflowを使い、開始時接続状態だけ記録する）
-	const onPlay = useCallback(() => {
-		const loaded = loadFromLocalStorage();
-		if (!loaded || loaded.nodes.length === 0) {
-			setError("データが見つかりません。Editorで作成してください。");
-			return;
-		}
-		
-		// ★修正: currentProjectStoreから最新のバインド設定を読み込む
-		const storedBindings = getProjectBindings();
-		
-		// バインド設定を適用
-		const flowWithBindings = storedBindings ? 
-			{ ...loaded, projectBindings: storedBindings } : loaded;
-		
-		console.log("PresenterView: Loading bindings", { storedBindings, flowWithBindings });
-		
-		setFlow(flowWithBindings);
-		// Startラベルがあるノード、なければ先頭
-		const startNode = loaded.nodes.find(n => n.data.label === "Start") || loaded.nodes[0];
-		setCurrentNodeId(startNode.id);
-		setStartedWithWii(!!wiiConnected);
-		setPlayingSince(Date.now());
-		setMode("playing");
-	}, [wiiConnected]);
+    // ★追加: リアクションをデバッグする（N=One, M=Two）
+    const [debugEmitClap, setDebugEmitClap] = useState(false);
+    const [debugEmitLaugh, setDebugEmitLaugh] = useState(false);
 
-	// ★追加: キーボードでリアクションをデバッグする（N=One, M=Two）
-	const [debugEmitClap, setDebugEmitClap] = useState(false);
-	const [debugEmitLaugh, setDebugEmitLaugh] = useState(false);
+    // キーボード操作 (矢印キー対応 + ESCで戻る)
+    useEffect(() => {
+        if (!isPlaying) return;
 
-	// キーボード操作 (矢印キー対応 + ESCで戻る)
-	useEffect(() => {
-		if (!isPlaying) return;
-
-		const handleKeyDown = (e: KeyboardEvent) => {
-			// 追加: 線をクリア (R)
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // 追加: 線をクリア (R)
 			if (e.key === "r" || e.key === "R") {
 				setDrawingPoints([]);
 				isMouseDrawingRef.current = false;
@@ -486,28 +474,25 @@ export function PresenterView() {
 			if (e.key === "ArrowLeft") prevSlide();
 			// ESCキーで元の画面へ戻る（エディタ経由ならエディタへ）
 			if (e.key === "Escape") goBack();
-		};
+        };
 
-		window.addEventListener("keydown", handleKeyDown);
-		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [isPlaying, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches, playSound]);
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isPlaying, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches, playSound]);
 
-	const effectiveProjectBindings = useMemo(() => {
-		const merged = mergeBindings(flow?.projectBindings);
-		console.log("PresenterView: effectiveProjectBindings updated", { 
-			flowBindings: flow?.projectBindings, 
-			merged 
-		});
-		return merged;
-	}, [flow]);
+    const effectiveProjectBindings = useMemo(() => {
+        const merged = mergeBindings(flow?.projectBindings);
+        console.log("PresenterView: effectiveProjectBindings updated", { 
+            flowBindings: flow?.projectBindings, 
+            merged 
+        });
+        return merged;
+    }, [flow]);
 
-	// --- Wiiリモコン ロジック ---
-	// 旧: ここで Right/Left/Plus... を直書きしていたが、projectBindings で解釈する
-	
-	// --- プロジェクト全体バインドを適用してアクション実行 ---
-	const runAction = useCallback(
-		(a: BindingAction) => {
-			switch (a.type) {
+    // --- プロジェクト全体バインドを適用してアクション実行 ---
+    const runAction = useCallback(
+        (a: BindingAction) => {
+            switch (a.type) {
 				case "next":
 					nextSlide();
 					return;
@@ -532,97 +517,98 @@ export function PresenterView() {
 				case "none":
 				default:
 					return;
-			}
-		},
-		[nextSlide, prevSlide, branchByNumberKey, hasMultipleBranches],
-	);
+            }
+        },
+        [nextSlide, prevSlide, branchByNumberKey, hasMultipleBranches],
+    );
 
-	const prevPressedRef = useRef<Record<string, boolean>>({});
-	useEffect(() => {
-		if (mode !== "playing") return;
+    // ★修正: Wiiリモコンのボタン処理（isPlayingがtrueの時のみ動作）
+    const prevPressedRef = useRef<Record<string, boolean>>({});
+    useEffect(() => {
+        if (!isPlaying) return;
 
-		// そのフレームで「押された瞬間」のボタンだけ処理（押しっぱなしで連打しない）
-		const prevPressed = prevPressedRef.current;
-		for (const btn of Object.keys(pressed)) {
-			const isDown = (pressed as Record<string, boolean>)[btn];
-			const wasDown = !!prevPressed[btn];
-			if (!isDown || wasDown) continue;
+        // そのフレームで「押された瞬間」のボタンだけ処理（押しっぱなしで連打しない）
+        const prevPressed = prevPressedRef.current;
+        for (const btn of Object.keys(pressed)) {
+            const isDown = (pressed as Record<string, boolean>)[btn];
+            const wasDown = !!prevPressed[btn];
+            if (!isDown || wasDown) continue;
 
-			const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn] ?? { type: "none" };
-			runAction(act);
-		}
-		prevPressedRef.current = { ...(pressed as Record<string, boolean>) };
-	}, [pressed, mode, effectiveProjectBindings, runAction]);
+            const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn] ?? { type: "none" };
+            runAction(act);
+        }
+        prevPressedRef.current = { ...(pressed as Record<string, boolean>) };
+    }, [pressed, isPlaying, effectiveProjectBindings, runAction]);
 
-	// ★追加: リアクション検出（バインドベース）
-	const shouldEmitClap = useMemo(() => {
-		if (mode !== "playing") return false;
-		// 押されたボタンの中で、"clap" にバインドされているものがあるか？
-		for (const btn of Object.keys(pressed)) {
-			const isDown = (pressed as Record<string, boolean>)[btn];
-			if (!isDown) continue;
-			const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn];
-			if (act?.type === "reaction" && act.kind === "clap") return true;
-		}
-		return false;
-	}, [pressed, effectiveProjectBindings, mode]);
+    // ★追加: リアクション検出（バインドベース）
+    const shouldEmitClap = useMemo(() => {
+        if (!isPlaying) return false;
+        // 押されたボタンの中で、"clap" にバインドされているものがあるか？
+        for (const btn of Object.keys(pressed)) {
+            const isDown = (pressed as Record<string, boolean>)[btn];
+            if (!isDown) continue;
+            const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn];
+            if (act?.type === "reaction" && act.kind === "clap") return true;
+        }
+        return false;
+    }, [pressed, effectiveProjectBindings, isPlaying]);
 
-	const shouldEmitLaugh = useMemo(() => {
-		if (mode !== "playing") return false;
-		for (const btn of Object.keys(pressed)) {
-			const isDown = (pressed as Record<string, boolean>)[btn];
-			if (!isDown) continue;
-			const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn];
-			if (act?.type === "reaction" && act.kind === "laugh") return true;
-		}
-		return false;
-	}, [pressed, effectiveProjectBindings, mode]);
+    const shouldEmitLaugh = useMemo(() => {
+        if (!isPlaying) return false;
+        for (const btn of Object.keys(pressed)) {
+            const isDown = (pressed as Record<string, boolean>)[btn];
+            if (!isDown) continue;
+            const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn];
+            if (act?.type === "reaction" && act.kind === "laugh") return true;
+        }
+        return false;
+    }, [pressed, effectiveProjectBindings, isPlaying]);
 
-	// --- 描画ロジック (IRセンサー & Aボタン) ---
-	useEffect(() => {
-		const canvas = canvasRef.current;
-		const ctx = canvas?.getContext("2d");
-		if (!canvas || !ctx) return;
+    // --- 描画ロジック (IRセンサー & Aボタン) ---
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext("2d");
+        if (!canvas || !ctx) return;
 
-		// キャンバスサイズをウィンドウに合わせる
-		if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
-			canvas.width = window.innerWidth;
-			canvas.height = window.innerHeight;
-		}
+        // キャンバスサイズをウィンドウに合わせる
+        if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
 
-		// 画面クリア
-		ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // 画面クリア
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-		// 既存の線を描画
-		ctx.lineWidth = 5;
-		ctx.strokeStyle = "red";
-		ctx.lineCap = "round";
-		ctx.lineJoin = "round";
+        // 既存の線を描画
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = "red";
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
 
-		if (drawingPoints.length > 1) {
-			let started = false;
-			for (const p of drawingPoints) {
-				if (!p) {
-					if (started) {
-						ctx.stroke();
-						started = false;
-					}
-					continue;
-				}
-				if (!started) {
-					ctx.beginPath();
-					ctx.moveTo(p.x, p.y);
-					started = true;
-				} else {
-					ctx.lineTo(p.x, p.y);
-				}
-			}
-			if (started) ctx.stroke();
-		}
+        if (drawingPoints.length > 1) {
+            let started = false;
+            for (const p of drawingPoints) {
+                if (!p) {
+                    if (started) {
+                        ctx.stroke();
+                        started = false;
+                    }
+                    continue;
+                }
+                if (!started) {
+                    ctx.beginPath();
+                    ctx.moveTo(p.x, p.y);
+                    started = true;
+                } else {
+                    ctx.lineTo(p.x, p.y);
+                }
+            }
+            if (started) ctx.stroke();
+        }
 
-		// IRポインター処理
-		if (wiiState && wiiState.ir.length > 0) {
-			// IRの1点目を使用
+        // IRポインター処理
+        if (wiiState && wiiState.ir.length > 0) {
+            // IRの1点目を使用
 			const dot = wiiState.ir[0];
 			// 座標変換
 			const pos = mapIrToScreen(dot.x, dot.y, window.innerWidth, window.innerHeight);
@@ -652,116 +638,116 @@ export function PresenterView() {
 					setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
 				}
 			}
-		}
-	}, [wiiState, drawingPoints]);
+        }
+    }, [wiiState, drawingPoints]);
 
 
-	return (
-		<main
-			ref={containerRef}
-			onMouseDown={(e) => {
-				if (mode !== "playing") return;
-				if (e.button !== 0) return;
-				// UI(ボタン等)操作は邪魔しない
-				const el = e.target as HTMLElement | null;
-				if (el && el.closest("button, a, input, textarea, select")) return;
-				e.preventDefault();
-				isMouseDrawingRef.current = true;
-				setDrawingPoints((prev) => {
-					const next = prev.slice();
-					if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
-					next.push({ x: e.clientX, y: e.clientY });
-					return next;
-				});
-			}}
-			onMouseMove={(e) => {
-				if (mode !== "playing") return;
-				if (!isMouseDrawingRef.current) return;
-				e.preventDefault();
-				setDrawingPoints((prev) => {
-					const last = prev[prev.length - 1];
-					if (last && Math.abs(last.x - e.clientX) + Math.abs(last.y - e.clientY) < 2) return prev;
-					return [...prev, { x: e.clientX, y: e.clientY }];
-				});
-			}}
-			onMouseUp={() => {
-				if (!isMouseDrawingRef.current) return;
-				isMouseDrawingRef.current = false;
-				setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
-			}}
-			onMouseLeave={() => {
-				if (!isMouseDrawingRef.current) return;
-				isMouseDrawingRef.current = false;
-				setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
-			}}
-			style={{
-				position: "relative",
-				width: "100vw",
-				height: "100vh",
-				overflow: "hidden",
-				background: "black",
-			}}
-		>
-			<WiiDisconnectPopup
-				isPlaying={isPlaying}
-				startedWithWii={startedWithWii}
-				wiiConnected={wiiConnected}
-				wiiDisconnectedAt={wiiDisconnectedAt}
-				playingSince={playingSince}
-			/>
+    return (
+        <main
+            ref={containerRef}
+            onMouseDown={(e) => {
+                if (!isPlaying) return;
+                if (e.button !== 0) return;
+                // UI(ボタン等)操作は邪魔しない
+                const el = e.target as HTMLElement | null;
+                if (el && el.closest("button, a, input, textarea, select")) return;
+                e.preventDefault();
+                isMouseDrawingRef.current = true;
+                setDrawingPoints((prev) => {
+                    const next = prev.slice();
+                    if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
+                    next.push({ x: e.clientX, y: e.clientY });
+                    return next;
+                });
+            }}
+            onMouseMove={(e) => {
+                if (!isPlaying) return;
+                if (!isMouseDrawingRef.current) return;
+                e.preventDefault();
+                setDrawingPoints((prev) => {
+                    const last = prev[prev.length - 1];
+                    if (last && Math.abs(last.x - e.clientX) + Math.abs(last.y - e.clientY) < 2) return prev;
+                    return [...prev, { x: e.clientX, y: e.clientY }];
+                });
+            }}
+            onMouseUp={() => {
+                if (!isMouseDrawingRef.current) return;
+                isMouseDrawingRef.current = false;
+                setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
+            }}
+            onMouseLeave={() => {
+                if (!isMouseDrawingRef.current) return;
+                isMouseDrawingRef.current = false;
+                setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
+            }}
+            style={{
+                position: "relative",
+                width: "100vw",
+                height: "100vh",
+                overflow: "hidden",
+                background: "black",
+            }}
+        >
+            <WiiDisconnectPopup
+                isPlaying={isPlaying}
+                startedWithWii={startedWithWii}
+                wiiConnected={wiiConnected}
+                wiiDisconnectedAt={wiiDisconnectedAt}
+                playingSince={playingSince}
+            />
 
-			{/* 戻るボタン（左上） */}
-			<div style={{ position: "absolute", top: 20, left: 20, zIndex: 10000 }}>
-				<button onClick={goBack} style={{ padding: "10px 14px", fontSize: 14 }}>
-					{returnLabel}
-				</button>
-			</div>
+            {/* 戻るボタン（左上） */}
+            <div style={{ position: "absolute", top: 20, left: 20, zIndex: 10000 }}>
+                <button onClick={goBack} style={{ padding: "10px 14px", fontSize: 14 }}>
+                    {returnLabel}
+                </button>
+            </div>
 
-			{/* ★修正: リアクション（バインドベース） */}
-			<ReactionOverlay emitClap={shouldEmitClap} emitLaugh={shouldEmitLaugh} />
+            {/* リアクション */}
+            <ReactionOverlay emitClap={shouldEmitClap} emitLaugh={shouldEmitLaugh} />
 
-			{/* ★修正: スライド表示エリア (全画面・余白なし・アスペクト比維持) */}
-			<div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-				{currentNode ? (
-					<>
-						{currentNode.data.asset?.kind === "pdf" ? (
-							<PdfSlide
-								assetId={currentNode.data.asset.assetId}
-								page={currentNode.data.asset.page ?? 1}
-								fallbackDataUrl={currentNode.data.asset.thumbnailDataUrl}
-								alt={currentNode.data.label}
-								getOrLoadPdfDocument={getOrLoadPdfDocument}
-							/>
-						) : currentNode.data.asset?.kind === "video" ? (
-							<VideoSlide assetId={currentNode.data.asset.assetId} alt={currentNode.data.label} />
-						) : (
-							<h1 style={{ fontSize: 80, color: "white", textAlign: "center", maxWidth: "80%" }}>
-								{currentNode.data.label}
-							</h1>
-						)}
-					</>
-				) : (
-					<div style={{ color: "white" }}>{error ?? "スライドデータがありません"}</div>
-				)}
-			</div>
+            {/* スライド表示エリア (全画面・余白なし・アスペクト比維持) */}
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {currentNode ? (
+                    <>
+                        {currentNode.data.asset?.kind === "pdf" ? (
+                            <PdfSlide
+                                assetId={currentNode.data.asset.assetId}
+                                page={currentNode.data.asset.page ?? 1}
+                                fallbackDataUrl={currentNode.data.asset.thumbnailDataUrl}
+                                alt={currentNode.data.label}
+                                getOrLoadPdfDocument={getOrLoadPdfDocument}
+                            />
+                        ) : currentNode.data.asset?.kind === "video" ? (
+                            <VideoSlide assetId={currentNode.data.asset.assetId} alt={currentNode.data.label} />
+                        ) : (
+                            <h1 style={{ fontSize: 80, color: "white", textAlign: "center", maxWidth: "80%" }}>
+                                {currentNode.data.label}
+                            </h1>
+                        )}
+                    </>
+                ) : (
+                    <div style={{ color: "white" }}>{error ?? "スライドデータがありません"}</div>
+                )}
+            </div>
 
-			{/* 描画レイヤー (最前面) */}
-			<canvas
-				ref={canvasRef}
-				style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
-			/>
+            {/* 描画レイヤー (最前面) */}
+            <canvas
+                ref={canvasRef}
+                style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
+            />
 
-			{/* デバッグ情報 (右上) */}
-			<WiiDebugPanel
-				wiiState={wiiState}
-				pressed={pressed}
-				effectiveProjectBindings={effectiveProjectBindings}
-			/>
+            {/* デバッグ情報 (右上) */}
+            <WiiDebugPanel
+                wiiState={wiiState}
+                pressed={pressed}
+                effectiveProjectBindings={effectiveProjectBindings}
+            />
 
-			{/* 操作ガイド (左下) */}
-			<div style={{ position: "absolute", bottom: 20, left: 20, color: "rgba(255,255,255,0.5)", fontSize: 14, pointerEvents: "none" }}>
-				[ESC] 戻る
-			</div>
-		</main>
-	);
+            {/* 操作ガイド (左下) */}
+            <div style={{ position: "absolute", bottom: 20, left: 20, color: "rgba(255,255,255,0.5)", fontSize: 14, pointerEvents: "none" }}>
+                [ESC] 戻る
+            </div>
+        </main>
+    );
 }
