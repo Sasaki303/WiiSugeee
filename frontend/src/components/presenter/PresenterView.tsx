@@ -185,6 +185,7 @@ export function PresenterView() {
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const containerRef = useRef<HTMLDivElement | null>(null);
+	const isMouseDrawingRef = useRef(false);
 
 	const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
 	const playSound = useCallback((key: "q" | "w" | "e") => {
@@ -197,7 +198,6 @@ export function PresenterView() {
 			console.warn("sound play failed", key, err);
 		}
 	}, []);
-	const isMouseDrawingRef = useRef(false);
 
 	const returnTo = useMemo(() => {
 		return searchParams.get("from") === "editor" ? "/editor" : "/";
@@ -437,6 +437,29 @@ export function PresenterView() {
 		if (!isPlaying) return;
 
 		const handleKeyDown = (e: KeyboardEvent) => {
+			// 追加: 線をクリア (R)
+			if (e.key === "r" || e.key === "R") {
+				setDrawingPoints([]);
+				isMouseDrawingRef.current = false;
+				wasWiiADownRef.current = false;
+				return;
+			}
+			
+			if (!e.repeat) {
+				if (e.key === "q" || e.key === "Q") {
+					playSound("q");
+					return;
+				}
+				if (e.key === "w" || e.key === "W") {
+					playSound("w");
+					return;
+				}
+				if (e.key === "e" || e.key === "E") {
+					playSound("e");
+					return;
+				}
+			}
+
 			// ★追加: リアクション（N / M）
 			// 押しっぱなしで増殖しないように repeat を無視
 			if (!e.repeat) {
@@ -467,7 +490,16 @@ export function PresenterView() {
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [isPlaying, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches]);
+	}, [isPlaying, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches, playSound]);
+
+	const effectiveProjectBindings = useMemo(() => {
+		const merged = mergeBindings(flow?.projectBindings);
+		console.log("PresenterView: effectiveProjectBindings updated", { 
+			flowBindings: flow?.projectBindings, 
+			merged 
+		});
+		return merged;
+	}, [flow]);
 
 	// --- Wiiリモコン ロジック ---
 	// 旧: ここで Right/Left/Plus... を直書きしていたが、projectBindings で解釈する
