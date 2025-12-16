@@ -8,8 +8,7 @@ import { useWiiController, type WiiState } from "@/hooks/useWiiController";
 import { ReactionOverlay } from "@/components/presenter/ReactionOverlay";
 import { formatAction, mergeBindings, type BindingAction } from "@/lib/buttonBindings";
 import { getProjectBindings } from "@/lib/currentProjectStore";
-
-type Mode = "idle" | "playing";
+import { WiiDisconnectPopup } from "@/components/presenter/WiiDisconnectPopup";
 
 function PdfSlide(props: {
 	assetId: string;
@@ -40,76 +39,84 @@ function PdfSlide(props: {
 
 	useEffect(() => {
 		let cancelled = false;
+
 		(async () => {
-			setRenderError(null);
-			const el = wrapperRef.current;
-			const canvas = canvasRef.current;
-			if (!el || !canvas || !size || size.w === 0 || size.h === 0) return;
-
-			// ★追加: 既存のレンダリングをキャンセル
-			if (renderTaskRef.current) {
-				try {
-					renderTaskRef.current.cancel();
-				} catch (e) {
-					// キャンセル済みの場合は無視
-				}
-				renderTaskRef.current = null;
-			}
-
-			const pdf = await getOrLoadPdfDocument(assetId);
-			if (cancelled) return;
-			const pdfPage = await pdf.getPage(page);
-			if (cancelled) return;
-
-			const viewport1 = pdfPage.getViewport({ scale: 1 });
-			const scale = Math.min(size.w / viewport1.width, size.h / viewport1.height);
-			const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-			const renderViewport = pdfPage.getViewport({ scale: scale * dpr });
-
-			canvas.width = Math.floor(renderViewport.width);
-			canvas.height = Math.floor(renderViewport.height);
-			canvas.style.width = `${Math.floor(renderViewport.width / dpr)}px`;
-			canvas.style.height = `${Math.floor(renderViewport.height / dpr)}px`;
-
-			const ctx = canvas.getContext("2d");
-			if (!ctx) return;
-			ctx.setTransform(1, 0, 0, 1, 0, 0);
-			ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-			// ★修正: レンダリングタスクを保持し、キャンセル可能にする
 			try {
-				renderTaskRef.current = pdfPage.render({ canvasContext: ctx, canvas, viewport: renderViewport });
-				await renderTaskRef.current.promise;
-				renderTaskRef.current = null;
-			} catch (e: any) {
-				if (!cancelled && e.name !== "RenderingCancelledException") {
-					console.error("PDF rendering error:", e);
-					setRenderError(String(e));
+				setRenderError(null);
+
+				const el = wrapperRef.current;
+				const canvas = canvasRef.current;
+				if (!el || !canvas || !size || size.w === 0 || size.h === 0) return;
+
+				// ★追加: 既存のレンダリングをキャンセル
+				if (renderTaskRef.current) {
+					try {
+						renderTaskRef.current.cancel();
+					} catch (e) {
+						// キャンセル済みの場合は無視
+					}
+					renderTaskRef.current = null;
 				}
+
+				const pdf = await getOrLoadPdfDocument(assetId);
+				if (cancelled) return;
+				const pdfPage = await pdf.getPage(page);
+				if (cancelled) return;
+
+				const viewport1 = pdfPage.getViewport({ scale: 1 });
+				const scale = Math.min(size.w / viewport1.width, size.h / viewport1.height);
+				const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+				const renderViewport = pdfPage.getViewport({ scale: scale * dpr });
+
+				canvas.width = Math.floor(renderViewport.width);
+				canvas.height = Math.floor(renderViewport.height);
+				canvas.style.width = `${Math.floor(renderViewport.width / dpr)}px`;
+				canvas.style.height = `${Math.floor(renderViewport.height / dpr)}px`;
+
+				const ctx = canvas.getContext("2d");
+				if (!ctx) return;
+
+				ctx.setTransform(1, 0, 0, 1, 0, 0);
+				ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+				// ★修正: renderタスクを保持し、cleanupでcancelできるようにする
+				const task = pdfPage.render({ canvasContext: ctx, canvas, viewport: renderViewport });
+				renderTaskRef.current = task;
+
+				await task.promise;
+
+				// 完了したら参照を外す
+				if (renderTaskRef.current === task) {
+					renderTaskRef.current = null;
+				}
+			} catch (e: any) {
+				// cancelは正常系として無視
+				const msg = e?.name === "RenderingCancelledException" ? null : (e instanceof Error ? e.message : String(e));
+				if (!cancelled && msg) setRenderError(msg);
 			}
 		})();
+
 		return () => {
 			cancelled = true;
-			// ★追加: コンポーネントのアンマウント時にレンダリングをキャンセル
+			// ★追加: effect cleanupで進行中renderを必ず止める
 			if (renderTaskRef.current) {
 				try {
 					renderTaskRef.current.cancel();
-				} catch (e) {
+					renderTaskRef.current = null;
+				} catch {
 					// 既にキャンセル済みの場合は無視
 				}
-				renderTaskRef.current = null;
 			}
 		};
 	}, [assetId, getOrLoadPdfDocument, page, size]);
 
 	return (
-		<div ref={wrapperRef} style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+		<div
+			ref={wrapperRef}
+			style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}
+		>
 			{renderError && fallbackDataUrl ? (
-				<img
-					src={fallbackDataUrl}
-					style={{ width: "100%", height: "100%", objectFit: "contain" }}
-					alt={alt}
-				/>
+				<img src={fallbackDataUrl} style={{ width: "100%", height: "100%", objectFit: "contain" }} alt={alt} />
 			) : (
 				<canvas ref={canvasRef} aria-label={alt} />
 			)}
@@ -191,14 +198,20 @@ export function PresenterView() {
 	}, [router, returnTo]);
 
 	// Wiiリモコンの状態を取得
-	const { wiiState, pressed } = useWiiController();
+	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt } = useWiiController();
 
-	const [mode, setMode] = useState<Mode>("idle");
 	const [flow, setFlow] = useState<SerializedFlow | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
+	const [startedWithWii, setStartedWithWii] = useState(false);
+	// ★再生開始時刻（開始後の切断のみポップアップ対象にする）
+	const [playingSince, setPlayingSince] = useState<number>(0);
+	const [mode, setMode] = useState<"idle" | "playing">("idle");
 
 	const pdfDocCacheRef = useRef<Map<string, Promise<any>>>(new Map());
+
+	// Presenterは常に flow/currentNodeId がある前提で動かしているので、それを playing 判定にする
+	const isPlaying = flow != null && currentNodeId != null;
 
 	const getOrLoadPdfDocument = useCallback(async (assetId: string) => {
 		const cached = pdfDocCacheRef.current.get(assetId);
@@ -236,6 +249,24 @@ export function PresenterView() {
 	const currentNode = useMemo(() =>
 		flow?.nodes.find((n) => n.id === currentNodeId),
 		[flow, currentNodeId]);
+
+	useEffect(() => {
+		const loaded = loadFromLocalStorage();
+		if (!loaded || loaded.nodes.length === 0) {
+			setError("データが見つかりません。Editorで作成してください。");
+			setFlow(null);
+			setCurrentNodeId(null);
+			return;
+		}
+		setError(null);
+		setFlow(loaded);
+		const startNode = loaded.nodes.find((n) => n.data.label === "Start") || loaded.nodes[0];
+		setCurrentNodeId(startNode.id);
+	}, []);
+
+	useEffect(() => {
+		if (wiiConnected) setStartedWithWii(true);
+	}, [wiiConnected]);
 
 	const outgoingEdges = useMemo(() => {
 		if (!flow || !currentNodeId) return [];
@@ -336,7 +367,7 @@ export function PresenterView() {
 		}
 	}, [flow, currentNodeId, navigateTo]);
 
-	// 再生開始
+	// 再生開始（現在のflowを使い、開始時接続状態だけ記録する）
 	const onPlay = useCallback(() => {
 		const loaded = loadFromLocalStorage();
 		if (!loaded || loaded.nodes.length === 0) {
@@ -357,12 +388,18 @@ export function PresenterView() {
 		// Startラベルがあるノード、なければ先頭
 		const startNode = loaded.nodes.find(n => n.data.label === "Start") || loaded.nodes[0];
 		setCurrentNodeId(startNode.id);
+		setStartedWithWii(!!wiiConnected);
+		setPlayingSince(Date.now());
 		setMode("playing");
-	}, []);
+	}, [wiiConnected]);
+
+	// ★追加: キーボードでリアクションをデバッグする（N=One, M=Two）
+	const [debugEmitClap, setDebugEmitClap] = useState(false);
+	const [debugEmitLaugh, setDebugEmitLaugh] = useState(false);
 
 	// キーボード操作 (矢印キー対応 + ESCで戻る)
 	useEffect(() => {
-		if (mode !== "playing") return;
+		if (!isPlaying) return;
 
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.key >= "1" && e.key <= "9") {
@@ -379,7 +416,7 @@ export function PresenterView() {
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [mode, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches]);
+	}, [isPlaying, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches]);
 
 	const effectiveProjectBindings = useMemo(() => {
 		const merged = mergeBindings(flow?.projectBindings);
@@ -391,12 +428,8 @@ export function PresenterView() {
 	}, [flow]);
 
 	// --- Wiiリモコン ロジック ---
-	useEffect(() => {
-		if (mode !== "playing") return;
-
-		// 旧: ここで Right/Left/Plus... を直書きしていたが、projectBindings で解釈する
-	}, [pressed, mode, nextSlide, prevSlide, branchTo, hasMultipleBranches]);
-
+	// 旧: ここで Right/Left/Plus... を直書きしていたが、projectBindings で解釈する
+	
 	// --- プロジェクト全体バインドを適用してアクション実行 ---
 	const runAction = useCallback(
 		(a: BindingAction) => {
@@ -524,6 +557,14 @@ export function PresenterView() {
 				background: "black",
 			}}
 		>
+			<WiiDisconnectPopup
+				isPlaying={isPlaying}
+				startedWithWii={startedWithWii}
+				wiiConnected={wiiConnected}
+				wiiDisconnectedAt={wiiDisconnectedAt}
+				playingSince={playingSince}
+			/>
+
 			{/* 戻るボタン（左上） */}
 			<div style={{ position: "absolute", top: 20, left: 20, zIndex: 10000 }}>
 				<button onClick={goBack} style={{ padding: "10px 14px", fontSize: 14 }}>
@@ -555,7 +596,7 @@ export function PresenterView() {
 						)}
 					</>
 				) : (
-					<div style={{ color: "white" }}>スライドデータがありません</div>
+					<div style={{ color: "white" }}>{error ?? "スライドデータがありません"}</div>
 				)}
 			</div>
 
