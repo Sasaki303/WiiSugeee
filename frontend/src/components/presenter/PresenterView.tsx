@@ -527,6 +527,10 @@ export function PresenterView() {
 			if (!isDown) continue;
 			const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn];
 			if (act?.type === "reaction" && act.kind === "laugh") return true;
+		}
+		return false;
+	}, [pressed, effectiveProjectBindings, mode]);
+
 	// --- 描画ロジック (IRセンサー & Aボタン) ---
 	useEffect(() => {
 		const canvas = canvasRef.current;
@@ -538,10 +542,6 @@ export function PresenterView() {
 			canvas.width = window.innerWidth;
 			canvas.height = window.innerHeight;
 		}
-		return false;
-	}, [pressed, effectiveProjectBindings, mode]);
-
-    // ★修正前はこのあたりに useMemo がありましたが、上に移動しました
 		// 画面クリア
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -605,32 +605,10 @@ export function PresenterView() {
 				}
 			}
 		}
-
 	}, [wiiState, drawingPoints]);
 
 
-	// UIレンダリング
-	if (mode === "idle") {
-		return (
-			<main style={{ height: "100vh", display: "grid", placeItems: "center" }}>
-				<div style={{ textAlign: "center" }}>
-					<h1>Wii Presenter</h1>
-					<div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 10 }}>
-						<button onClick={goBack} style={{ padding: "10px 20px", fontSize: 16 }}>
-							{returnLabel}
-						</button>
-					<button onClick={onPlay} style={{ padding: "10px 20px", fontSize: 20 }}>
-						再生開始
-					</button>
-					</div>
-					<p style={{ marginTop: 20, color: '#666' }}>
-						Wiiリモコンを接続するか、キーボード(←/→)で操作できます。
-					</p>
-					{error && <p style={{ color: 'red' }}>{error}</p>}
-				</div>
-			</main>
-		);
-	}
+
 
 	return (
 		<main
