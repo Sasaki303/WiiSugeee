@@ -30,6 +30,9 @@ export default function Home() {
 					<Link href="/present">発表モードを開く</Link>
 				</li>
 				<li>
+					<Link href="/settings">設定を開く</Link>
+				</li>
+				<li>
 					<button onClick={onLoadProject}>wiislide.zip を読み込み</button>
 				</li>
 			</ul>

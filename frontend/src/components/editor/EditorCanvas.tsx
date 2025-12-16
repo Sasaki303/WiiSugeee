@@ -31,6 +31,7 @@ import {
 import { clearAllAssetBlobs, putAssetBlob } from "@/lib/idbAssets";
 import { saveProjectAsZip, loadProjectFromZip, loadProjectFromZipFile } from "@/lib/projectArchive";
 import { createAssetMeta } from "@/lib/projectFolder";
+import { setCurrentFlow } from "@/lib/currentProjectStore";
 
 function hashString(input: string): string {
 	// djb2
@@ -200,7 +201,7 @@ async function imageToThumbnailDataUrl(file: File): Promise<string | undefined> 
 }
 
 function flowFromState(nodes: Node<SlideNodeData>[], edges: Edge[], assets: ProjectAsset[]): SerializedFlow {
-	return {
+	const flow: SerializedFlow = {
 		version: 1,
 		assets,
 		nodes: nodes.map((node) => ({
@@ -216,6 +217,11 @@ function flowFromState(nodes: Node<SlideNodeData>[], edges: Edge[], assets: Proj
 			label: typeof edge.label === "string" ? edge.label : undefined,
 		})),
 	};
+
+	// 追加：エディタが生成した最新flowを「現在プロジェクト」として保持
+	setCurrentFlow(flow);
+
+	return flow;
 }
 
 function stateFromFlow(flow: SerializedFlow): { nodes: Node<SlideNodeData>[]; edges: Edge[] } {
@@ -610,7 +616,11 @@ function InnerEditor() {
 	}, [clearAndGoHome, isDirty]);
 
 	const goPresent = useCallback(() => {
-		router.push("/present?auto=1&from=editor");
+		router.push("/present?from=editor");
+	}, [router]);
+
+	const goSettings = useCallback(() => {
+		router.push("/settings");
 	}, [router]);
 
 	const iconStyle: React.CSSProperties = {
@@ -656,6 +666,13 @@ function InnerEditor() {
 						<path d="M8 5v14l11-7z" />
 					</svg>
 					再生
+				</button>
+				<button onClick={goSettings} style={buttonStyle} aria-label="設定">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={iconStyle}>
+						<path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
+						<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-1.41 3.41h-.2a2 2 0 0 1-1.41-.59l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06A2 2 0 0 1 3 18.07v-.2a2 2 0 0 1 .59-1.41l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H2.4a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 0 1 5.02 3h.2a2 2 0 0 1 1.41.59l.06.06a1.65 1.65 0 0 0 1.82.33h0A1.65 1.65 0 0 0 10 2.49V2.4a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06A2 2 0 0 1 20.41 5.02v.2a2 2 0 0 1-.59 1.41l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1h.09a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+					</svg>
+					設定
 				</button>
 				<button onClick={onImportClick} disabled={isImporting} style={buttonStyle} aria-label="素材取り込み">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={iconStyle}>
