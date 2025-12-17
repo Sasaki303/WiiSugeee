@@ -514,12 +514,25 @@ export function PresenterView() {
 				case "reaction":
 					// ReactionOverlay が pressed.One/Two を見ているので、ここでは何もしない
 					return;
-				case "none":
+				case "paint":
+					// shouldPaintで別途処理するので、ここでは何もしない
+					return;
+				case "sound":
+					// 音声再生処理
+					if (a.kind === "shot") playSound("q");
+					else if (a.kind === "oh") playSound("e");
+					else if (a.kind === "uxo") playSound("w");
+					return;			case "remove":
+				// 描画を消去
+				setDrawingPoints([]);
+				isMouseDrawingRef.current = false;
+				wasWiiADownRef.current = false;
+				return;				case "none":
 				default:
 					return;
             }
         },
-        [nextSlide, prevSlide, branchByNumberKey, hasMultipleBranches],
+        [nextSlide, prevSlide, branchByNumberKey, hasMultipleBranches, playSound],
     );
 
     // ★修正: Wiiリモコンのボタン処理（isPlayingがtrueの時のみ動作）
@@ -564,7 +577,57 @@ export function PresenterView() {
         return false;
     }, [pressed, effectiveProjectBindings, isPlaying]);
 
-    // --- 描画ロジック (IRセンサー & Aボタン) ---
+    // PAINTボタンの最後の入力時刻を記録
+    const lastPaintInputTimeRef = useRef<number>(0);
+    const [shouldPaint, setShouldPaint] = useState(false);
+
+    // wiiState.buttonsをチェックして、現在PAINTボタンが押されているか継続的に監視
+    useEffect(() => {
+        if (!isPlaying || !wiiState) return;
+
+        // 現在押されているボタンの中にPAINTがあるかチェック
+        let isPaintButtonPressed = false;
+        for (const btn of Object.keys(wiiState.buttons)) {
+            const isDown = (wiiState.buttons as Record<string, boolean>)[btn];
+            if (!isDown) continue;
+            const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn];
+            if (act?.type === "paint") {
+                isPaintButtonPressed = true;
+                break;
+            }
+        }
+
+        if (isPaintButtonPressed) {
+            lastPaintInputTimeRef.current = Date.now();
+            setShouldPaint(true);
+        }
+    }, [wiiState, effectiveProjectBindings, isPlaying]);
+
+    // 200msタイマーで描画状態をチェック
+    useEffect(() => {
+        if (!isPlaying) {
+            setShouldPaint(false);
+            return;
+        }
+
+        const interval = setInterval(() => {
+            const now = Date.now();
+            const elapsed = now - lastPaintInputTimeRef.current;
+            
+            if (elapsed > 100 && shouldPaint) {
+                setShouldPaint(false);
+                // 描画を終了
+                if (isMouseDrawingRef.current) {
+                    isMouseDrawingRef.current = false;
+                    setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
+                }
+            }
+        }, 50); // 50msごとにチェック
+
+        return () => clearInterval(interval);
+    }, [isPlaying, shouldPaint]);
+
+    // --- 描画ロジック (IRセンサー & PAINTボタン) ---
     useEffect(() => {
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext("2d");
@@ -619,8 +682,8 @@ export function PresenterView() {
 			ctx.arc(pos.x, pos.y, 10, 0, Math.PI * 2);
 			ctx.fill();
 
-			// Aボタンを押している間、軌跡を追加
-			if (wiiState.buttons.A) {
+			// PAINTバインドされたボタンを押している間、軌跡を追加
+			if (shouldPaint) {
 				setDrawingPoints((prev) => {
 					const next = prev.slice();
 					if (!wasWiiADownRef.current) {
@@ -639,7 +702,7 @@ export function PresenterView() {
 				}
 			}
         }
-    }, [wiiState, drawingPoints]);
+    }, [wiiState, drawingPoints, shouldPaint]);
 
 
     return (
@@ -662,7 +725,22 @@ export function PresenterView() {
             }}
             onMouseMove={(e) => {
                 if (!isPlaying) return;
-                if (!isMouseDrawingRef.current) return;
+                // PAINTボタンが押されている場合も描画
+                const shouldDrawWithPaint = shouldPaint;
+                if (!isMouseDrawingRef.current && !shouldDrawWithPaint) return;
+                
+                // PAINTボタンで描画開始
+                if (shouldDrawWithPaint && !isMouseDrawingRef.current) {
+                    isMouseDrawingRef.current = true;
+                    setDrawingPoints((prev) => {
+                        const next = prev.slice();
+                        if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
+                        next.push({ x: e.clientX, y: e.clientY });
+                        return next;
+                    });
+                    return;
+                }
+                
                 e.preventDefault();
                 setDrawingPoints((prev) => {
                     const last = prev[prev.length - 1];
