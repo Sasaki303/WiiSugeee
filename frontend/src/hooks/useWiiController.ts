@@ -174,9 +174,10 @@ export function useWiiController() {
 				}
 				prevButtonsRef.current = data.buttons;
 
-				// 更新頻度制限
-				if (now - lastUpdateRef.current > 33) {
-					flushState(data);
+				// 更新頻度制限（ただし常に最新データを反映）
+				const shouldUpdate = now - lastUpdateRef.current > 33;
+				flushState(data);
+				if (shouldUpdate) {
 					lastUpdateRef.current = now;
 				}
 			} catch (e) {
