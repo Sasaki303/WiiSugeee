@@ -522,8 +522,12 @@ export function PresenterView() {
 					if (a.kind === "shot") playSound("q");
 					else if (a.kind === "oh") playSound("e");
 					else if (a.kind === "uxo") playSound("w");
-					return;
-				case "none":
+					return;			case "remove":
+				// 描画を消去
+				setDrawingPoints([]);
+				isMouseDrawingRef.current = false;
+				wasWiiADownRef.current = false;
+				return;				case "none":
 				default:
 					return;
             }

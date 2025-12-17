@@ -29,7 +29,8 @@ type FuncId =
 	| "PAINT"
 	| "SHOT"
 	| "OH"
-	| "UXO";
+	| "UXO"
+	| "REMOVE";
 
 type Bindings = Record<SlotId, FuncId>;
 
@@ -118,6 +119,8 @@ function funcLabel(f: FuncId): string {
             return "Oh...🔊";
         case "UXO":
             return "Uxo~🔊";
+        case "REMOVE":
+            return "REMOVE";
         default:
             return f;
     }
@@ -161,7 +164,7 @@ function getTransfer(e: React.DragEvent): DragPayload | null {
 }
 
 function allFuncs(maxCase: number): FuncId[] {
-    const base: FuncId[] = ["NEXT", "PREV", "HOME", "CLAP", "SMILE", "PLUS", "MINUS", "UP", "DOWN", "A", "B", "PAINT", "SHOT", "OH", "UXO"];
+    const base: FuncId[] = ["NEXT", "PREV", "HOME", "CLAP", "SMILE", "PLUS", "MINUS", "UP", "DOWN", "A", "B", "PAINT", "SHOT", "OH", "UXO", "REMOVE"];
     const cases: FuncId[] = ["CASE_A", "CASE_B", "CASE_C", "CASE_D", "CASE_E", "CASE_F", "CASE_G", "CASE_H", "CASE_I"].slice(
         0,
         Math.max(0, Math.min(9, maxCase)),
@@ -211,6 +214,8 @@ function toAction(funcId: FuncId): ButtonBindings[keyof ButtonBindings] {
 			return { type: "sound", kind: "oh" };
 		case "UXO":
 			return { type: "sound", kind: "uxo" };
+		case "REMOVE":
+			return { type: "remove" };
 		case "UP":
 		case "DOWN":
 		case "A":
@@ -244,6 +249,7 @@ function fromAction(a: ButtonBindings[keyof ButtonBindings] | undefined, fallbac
 	if (a.type === "prev") return "PREV";
 	if (a.type === "reaction") return a.kind === "clap" ? "CLAP" : "SMILE";
 	if (a.type === "paint") return "PAINT";
+	if (a.type === "remove") return "REMOVE";
 	if (a.type === "sound") {
 		if (a.kind === "shot") return "SHOT";
 		if (a.kind === "oh") return "OH";
