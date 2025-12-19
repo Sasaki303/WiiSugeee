@@ -10,6 +10,7 @@ import { WiiDebugPanel } from "@/components/presenter/WiiDebugPanel";
 import { mergeBindings, type BindingAction } from "@/lib/buttonBindings";
 import { getProjectBindings } from "@/lib/currentProjectStore";
 import { WiiDisconnectPopup } from "@/components/presenter/WiiDisconnectPopup";
+import { WiiReconnectPopup } from "@/components/presenter/WiiReconnectPopup";
 import { SlideDisplay } from "@/components/presenter/SlideDisplay";
 import { DrawingCanvas } from "@/components/presenter/DrawingCanvas";
 
@@ -557,6 +558,12 @@ export function PresenterView() {
                 wiiConnected={wiiConnected}
                 wiiDisconnectedAt={wiiDisconnectedAt}
                 playingSince={playingSince}
+            />
+
+            <WiiReconnectPopup
+                isPlaying={isPlaying}
+                wiiConnected={wiiConnected}
+                startedWithWii={startedWithWii}
             />
 
             {/* 戻るボタン（左上） */}

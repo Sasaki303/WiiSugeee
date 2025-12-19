@@ -35,6 +35,13 @@ export function WiiDisconnectPopup({
         setOpen(true);
     }, [isPlaying, startedWithWii, wiiDisconnectedAt, playingSince]);
 
+    // ★追加: 再接続されたら自動的にポップアップを閉じる
+    useEffect(() => {
+        if (wiiConnected && open) {
+            setOpen(false);
+        }
+    }, [wiiConnected, open]);
+
     if (!open) return null;
 
     return (
