@@ -37,6 +37,39 @@ a {
   text-decoration: none;
 }
 
+/* カスタムカーソル */
+html,
+body,
+#__next,
+*,
+main,
+div,
+canvas {
+  cursor: url("/cursor.png") 0 0, auto !important;
+}
+
+a,
+button,
+[role='button'],
+input[type='button'],
+input[type='submit'],
+input[type='reset'],
+select,
+label[for] {
+  cursor: url("/cursor.png") 0 0, auto !important;
+}
+
+a:hover,
+button:hover,
+[role='button']:hover,
+input[type='button']:hover,
+input[type='submit']:hover,
+input[type='reset']:hover,
+select:hover,
+label[for]:hover {
+  cursor: url("/PrecisionSelect.png") 16 16, pointer !important;
+}
+
 @media (prefers-color-scheme: dark) {
   html {
     color-scheme: dark;
