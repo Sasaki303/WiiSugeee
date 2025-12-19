@@ -1,5 +1,21 @@
 @import "reactflow/dist/style.css";
 
+@font-face {
+  font-family: 'ContinuumBold';
+  src: url('/fonts/contb.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ContinuumMedium';
+  src: url('/fonts/contm.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -68,6 +84,12 @@ input[type='reset']:hover,
 select:hover,
 label[for]:hover {
   cursor: url("/PrecisionSelect.png") 32 32, pointer !important;
+}
+
+/* プレゼン画面でお絵描き中はペンカーソル */
+.presenter-painting,
+.presenter-painting * {
+  cursor: url("/pen.png") 0 0, crosshair !important;
 }
 
 @media (prefers-color-scheme: dark) {
