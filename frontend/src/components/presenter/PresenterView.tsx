@@ -23,7 +23,7 @@ export function PresenterView() {
     const wasWiiADownRef = useRef(false);
 
     // Wiiリモコンの状態を取得
-	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt, sendWiiCommand } = useWiiController();
+	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt} = useWiiController();
 
     const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
     const playSound = useCallback((key: "q" | "w" | "e") => {
@@ -35,9 +35,7 @@ export function PresenterView() {
         } catch (err) {
             console.warn("sound play failed", key, err);
         }
-		// Wiiリモコンのスピーカーでも再生
-		sendWiiCommand('playSound', { sound: key });
-	}, [sendWiiCommand]);
+	}, []);
 
     const returnTo = useMemo(() => {
         return searchParams.get("from") === "editor" ? "/editor" : "/";
