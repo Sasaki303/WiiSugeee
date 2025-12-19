@@ -1,24 +1,13 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { WiiState } from "@/hooks/useWiiController";
 
 interface DrawingCanvasProps {
 	drawingPoints: Array<{ x: number; y: number } | null>;
-	wiiState: WiiState | null;
-	isPlaying: boolean;
-	shouldPaint: boolean;
-}
-
-// IRカメラの座標(0-1023)を画面座標に変換する関数
-function mapIrToScreen(irX: number, irY: number, screenW: number, screenH: number) {
-	const x = (1 - irX / 1024) * screenW;
-	const y = (irY / 768) * screenH;
-	return { x, y };
 }
 
 export function DrawingCanvas(props: DrawingCanvasProps) {
-	const { drawingPoints, wiiState, isPlaying, shouldPaint } = props;
+	const { drawingPoints } = props;
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 
 	useEffect(() => {
@@ -61,19 +50,7 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
 			}
 			if (started) ctx.stroke();
 		}
-
-		// IRポインター処理
-		if (wiiState && wiiState.ir.length > 0) {
-			const dot = wiiState.ir[0];
-			const pos = mapIrToScreen(dot.x, dot.y, window.innerWidth, window.innerHeight);
-
-			// カーソル描画
-			ctx.fillStyle = "blue";
-			ctx.beginPath();
-			ctx.arc(pos.x, pos.y, 10, 0, Math.PI * 2);
-			ctx.fill();
-		}
-	}, [wiiState, drawingPoints, shouldPaint]);
+	}, [drawingPoints]);
 
 	return (
 		<canvas

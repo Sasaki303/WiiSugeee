@@ -17,6 +17,10 @@ export type WiiState = {
 	};
 	accel: { x: number; y: number; z: number };
 	ir: { x: number; y: number }[];
+	cursor?: {
+		x: number; // 0–1
+		y: number; // 0–1
+	} | null;
 };
 
 type WiiServerMessage =
@@ -209,7 +213,7 @@ export function useWiiController() {
 		return () => {
 			try {
 				ws.close();
-			} catch {}
+			} catch { }
 		};
 
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -261,6 +265,7 @@ export function useWiiController() {
 			buttons: mergedButtons,
 			accel: wiiDataOrNull?.accel ?? { x: 0, y: 0, z: 0 },
 			ir: wiiDataOrNull?.ir ?? [],
+			cursor: wiiDataOrNull?.cursor ?? null, // ★追加
 		};
 
 		setWiiState(mergedState);

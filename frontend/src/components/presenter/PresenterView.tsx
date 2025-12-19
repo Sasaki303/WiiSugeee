@@ -13,6 +13,7 @@ import { WiiDisconnectPopup } from "@/components/presenter/WiiDisconnectPopup";
 import { WiiReconnectPopup } from "@/components/presenter/WiiReconnectPopup";
 import { SlideDisplay } from "@/components/presenter/SlideDisplay";
 import { DrawingCanvas } from "@/components/presenter/DrawingCanvas";
+import { IrPointerOverlay } from "@/components/presenter/IrPointerOverlay";
 
 export function PresenterView() {
     const router = useRouter();
@@ -584,12 +585,10 @@ export function PresenterView() {
             />
 
             {/* 描画レイヤー (最前面) */}
-            <DrawingCanvas
-                drawingPoints={drawingPoints}
-                wiiState={wiiState}
-                isPlaying={isPlaying}
-                shouldPaint={shouldPaint}
-            />
+            <DrawingCanvas drawingPoints={drawingPoints} />
+
+            {/* IRポインタ表示 */}
+            <IrPointerOverlay wiiState={wiiState} isPlaying={isPlaying} />
 
             {/* デバッグ情報 (右上) */}
             <WiiDebugPanel

@@ -35,7 +35,7 @@ wss.on('connection', (ws) => {
     // 接続直後に現在の状態を通知
     try {
         ws.send(JSON.stringify({ type: 'status', connected: isWiiConnected }));
-    } catch {}
+    } catch { }
     ws.on('close', () => {
         clients = clients.filter(c => c !== ws);
     });
@@ -54,13 +54,13 @@ function broadcast(data: any) {
 // 接続と初期化処理
 async function connectWiiRemote() {
     // 1. 候補デバイスを探す
-    const devices = HID.devices().filter(d => 
+    const devices = HID.devices().filter(d =>
         d.vendorId === VENDOR_ID && (d.productId === PRODUCT_ID || d.productId === PRODUCT_ID_PLUS)
     );
 
     if (devices.length === 0) {
         console.log('Wii Remote not found. Waiting...');
-		setWiiConnected(false);
+        setWiiConnected(false);
         setTimeout(connectWiiRemote, 3000);
         return;
     }
@@ -73,14 +73,14 @@ async function connectWiiRemote() {
     // 2. 書き込み可能なデバイスを探す
     for (const devInfo of devices) {
         if (!devInfo.path) continue;
-        
+
         try {
             console.log(`Testing path: ${devInfo.path}`);
             const tempDevice = new HID.HID(devInfo.path);
 
             // 疎通確認
             tempDevice.write([0x11, 0x10]);
-            
+
             console.log(">> Success! Connected.");
             device = tempDevice;
             break;
@@ -91,7 +91,7 @@ async function connectWiiRemote() {
 
     if (!device) {
         console.error("Could not connect to any device interfaces. Retrying...");
-		setWiiConnected(false);
+        setWiiConnected(false);
         setTimeout(connectWiiRemote, 3000);
         return;
     }
@@ -100,14 +100,27 @@ async function connectWiiRemote() {
     try {
         console.log("Initializing sensors (IR + Accel)...");
 
-        device.write([0x12, 0x00, 0x37]); 
-        device.write([0x13, 0x04]); 
-        device.write([0x1a, 0x04]); 
-        device.write([0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x90, 0x00, 0x41]);
-        device.write([0x17, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x90, 0x00, 0x41]);
+        // レポートモード0x37（Coreボタン + Accel + IR(10bytes) + Extension(6bytes)）に設定
+        device.write([0x12, 0x00, 0x37]);
 
-        console.log(" Initialization complete.");
-		setWiiConnected(true);
+        // IRカメラを有効化
+        device.write([0x13, 0x04]);
+        device.write([0x1a, 0x04]);
+
+        // IRカメラの初期化（感度設定3: バランス型）
+        // I2Cアドレス 0x30 に 0x01 を書き込み（初期化開始）
+        device.write([0x17, 0x00, 0x30, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00]);
+        // I2Cアドレス 0x00-0x06 に感度パラメータを書き込み
+        device.write([0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0xAA, 0x64, 0x63, 0x03]);
+        // I2Cアドレス 0x1A に感度パラメータを書き込み
+        device.write([0x17, 0x00, 0x1A, 0x00, 0x00, 0x00, 0x00, 0x63, 0x03]);
+        // I2Cアドレス 0x33 に 0x03 を書き込み（感度設定完了）
+        device.write([0x17, 0x00, 0x33, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x03]);
+        // I2Cアドレス 0x30 に 0x08 を書き込み（初期化完了）
+        device.write([0x17, 0x00, 0x30, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x08]);
+
+        console.log(" Initialization complete. (IR sensitivity: 3)");
+        setWiiConnected(true);
 
         // ★追加: Keep-Alive処理 (3秒ごとにステータス要求を送る)
         keepAliveInterval = setInterval(() => {
@@ -121,7 +134,7 @@ async function connectWiiRemote() {
 
     } catch (err) {
         console.error("Initialization failed:", err);
-		setWiiConnected(false);
+        setWiiConnected(false);
         device.close();
         setTimeout(connectWiiRemote, 1000);
         return;
@@ -135,17 +148,17 @@ async function connectWiiRemote() {
         const b2 = data[2] ?? 0;
 
         const buttons = {
-            Left:  (b1 & 0x01) !== 0,
+            Left: (b1 & 0x01) !== 0,
             Right: (b1 & 0x02) !== 0,
-            Down:  (b1 & 0x04) !== 0,
-            Up:    (b1 & 0x08) !== 0,
-            Plus:  (b1 & 0x10) !== 0,
-            Two:   (b2 & 0x01) !== 0,
-            One:   (b2 & 0x02) !== 0,
-            B:     (b2 & 0x04) !== 0,
-            A:     (b2 & 0x08) !== 0,
+            Down: (b1 & 0x04) !== 0,
+            Up: (b1 & 0x08) !== 0,
+            Plus: (b1 & 0x10) !== 0,
+            Two: (b2 & 0x01) !== 0,
+            One: (b2 & 0x02) !== 0,
+            B: (b2 & 0x04) !== 0,
+            A: (b2 & 0x08) !== 0,
             Minus: (b2 & 0x10) !== 0,
-            Home:  (b2 & 0x80) !== 0,
+            Home: (b2 & 0x80) !== 0,
         };
 
         const accel = {
@@ -154,22 +167,23 @@ async function connectWiiRemote() {
             z: data[5] ?? 0
         };
 
-        const irDots = [];
-        const ir1_x = (data[6] ?? 0) | (((data[8] ?? 0) >> 4) & 0x03) << 8;
-        const ir1_y = (data[7] ?? 0) | (((data[8] ?? 0) >> 6) & 0x03) << 8;
-        const ir2_x = (data[9] ?? 0)  | (((data[8] ?? 0) >> 0) & 0x03) << 8;
-        const ir2_y = (data[10] ?? 0) | (((data[8] ?? 0) >> 2) & 0x03) << 8;
+        // === IR解析（0x37専用） ===
+        const irDots = parseIR_0x37(data);
 
-        if (ir1_x < 1023 && ir1_y < 1023) irDots.push({ x: ir1_x, y: ir1_y });
-        if (ir2_x < 1023 && ir2_y < 1023) irDots.push({ x: ir2_x, y: ir2_y });
+        // === カーソル座標計算 ===
+        const cursorRaw = calcCursorFromIR(irDots);
+        const cursor = cursorRaw ? normalizeCursor(cursorRaw) : null;
 
+        // === フロントへ送るデータ ===
         const payload = {
             buttons,
             accel,
-            ir: irDots
+            ir: irDots,
+            cursor   // ★追加
         };
 
         broadcast(payload);
+
     });
 
     device.on('error', (err) => {
@@ -179,11 +193,11 @@ async function connectWiiRemote() {
         // （setWiiConnected(false) は state 変更時のみ送るため、保険としてここでも送る）
         broadcast({ type: 'wiiDisconnected', at: Date.now(), reason: String(err) });
 
-		setWiiConnected(false);
+        setWiiConnected(false);
         // ★追加: 切断されたらタイマーを止める
         if (keepAliveInterval) clearInterval(keepAliveInterval);
-        
-        try { device?.close(); } catch {}
+
+        try { device?.close(); } catch { }
         connectWiiRemote();
     });
 
@@ -192,9 +206,45 @@ async function connectWiiRemote() {
         // ★追加: closeも切断イベント発火点として通知
         broadcast({ type: 'wiiDisconnected', at: Date.now(), reason: 'close' });
 
-    		setWiiConnected(false);
-         if (keepAliveInterval) clearInterval(keepAliveInterval);
+        setWiiConnected(false);
+        if (keepAliveInterval) clearInterval(keepAliveInterval);
     });
+}
+
+function parseIR_0x37(data: Buffer) {
+    // IRデータは data[6]〜[15]
+    const points = [];
+
+    // IR1
+    const x1 = data[6] | ((data[8] >> 4) & 0x03) << 8;
+    const y1 = data[7] | ((data[8] >> 6) & 0x03) << 8;
+
+    // IR2
+    const x2 = data[9] | ((data[8] >> 0) & 0x03) << 8;
+    const y2 = data[10] | ((data[8] >> 2) & 0x03) << 8;
+
+    if (x1 < 1023 && y1 < 767) points.push({ x: x1, y: y1 });
+    if (x2 < 1023 && y2 < 767) points.push({ x: x2, y: y2 });
+
+    return points;
+}
+
+function calcCursorFromIR(ir: { x: number; y: number }[]) {
+    if (ir.length < 2) return null;
+
+    const [a, b] = ir.sort((p, q) => p.x - q.x);
+
+    const midX = (a.x + b.x) / 2;
+    const midY = (a.y + b.y) / 2;
+
+    return { x: midX, y: midY };
+}
+
+function normalizeCursor(pos: { x: number; y: number }) {
+    return {
+        x: 1.0 - pos.x / 1024, // 左右反転（重要）
+        y: pos.y / 768
+    };
 }
 
 connectWiiRemote();
