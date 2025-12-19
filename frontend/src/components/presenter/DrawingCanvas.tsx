@@ -83,11 +83,11 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
 			if (isStart) {
 				// 始点処理
 				if (mode === "erase") {
-					// 消しゴム始点スタンプ
+					// 消しゴム始点スタンプ（黒板消しのように徐々に薄くなる）
 					ctx.globalCompositeOperation = "destination-out";
-					ctx.fillStyle = "rgba(0,0,0,0.1)";
-					ctx.shadowBlur = 30;
-					ctx.shadowColor = "rgba(0,0,0,0.1)";
+					ctx.fillStyle = "rgba(0,0,0,0.18)"; // 5-6回で完全に消える
+					ctx.shadowBlur = 25; // ぼかしを入れて境界を柔らかく
+					ctx.shadowColor = "rgba(0,0,0,0.18)";
 					ctx.beginPath();
 					ctx.arc(p.x, p.y, 60, 0, Math.PI * 2);
 					ctx.fill();
@@ -107,15 +107,15 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
 					ctx.lineTo(p.x, p.y);
 					ctx.stroke();
 				} else {
-					// erase 補間
+					// erase 補間（黒板消しのように徐々に薄くなる）
 					ctx.globalCompositeOperation = "destination-out";
-					ctx.fillStyle = "rgba(0,0,0,0.1)";
-					ctx.shadowBlur = 30;
-					ctx.shadowColor = "rgba(0,0,0,0.1)";
+					ctx.fillStyle = "rgba(0,0,0,0.18)"; // 5-6回で完全に消える
+					ctx.shadowBlur = 25; // ぼかしを入れて境界を柔らかく
+					ctx.shadowColor = "rgba(0,0,0,0.18)";
 
 					const dist = Math.hypot(p.x - prev!.x, p.y - prev!.y);
 					const angle = Math.atan2(p.y - prev!.y, p.x - prev!.x);
-					const step = 15;
+					const step = 12; // 補間間隔を狭めて滑らかに
 
 					for (let d = step; d <= dist; d += step) {
 						const bx = prev!.x + Math.cos(angle) * d;
