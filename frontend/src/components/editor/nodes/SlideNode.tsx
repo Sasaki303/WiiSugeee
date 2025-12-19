@@ -8,8 +8,8 @@ export function SlideNode(props: NodeProps<SlideNodeData>) {
 	const rfEdges = useStore((s) => s.edges);
 
 	// 常時表示: 「出力が2本以上あるノード」からこのノードへ入ってくるエッジがあれば、
-	// その分岐番号(1-9)を左ハンドルに表示する。
-	// 複数の分岐元から入ってくる場合は "1/3" のように併記する。
+	// その分岐番号(A-I)を左ハンドルに表示する。
+	// 複数の分岐元から入ってくる場合は "A/C" のように併記する。
 	const branchKeysForThisNode = (() => {
 		const bySource = new Map<string, typeof rfEdges>();
 		for (const e of rfEdges) {
@@ -46,10 +46,17 @@ export function SlideNode(props: NodeProps<SlideNodeData>) {
 			}
 
 			const found = options.find((o) => o.target === id);
-			if (found?.key) keys.add(found.key);
+			if (found?.key) {
+				// 数字(1-9)をアルファベット(A-I)に変換
+				const numKey = parseInt(found.key, 10);
+				if (numKey >= 1 && numKey <= 9) {
+					const alphaKey = String.fromCharCode(64 + numKey); // A=65, B=66, ...
+					keys.add(alphaKey);
+				}
+			}
 		}
 
-		return Array.from(keys).sort((a, b) => Number(a) - Number(b));
+		return Array.from(keys).sort();
 	})();
 
 	const isConnectableMedia =
