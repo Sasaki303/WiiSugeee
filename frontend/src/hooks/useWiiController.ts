@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type WiiState = {
 	buttons: {
@@ -86,6 +86,7 @@ export function useWiiController() {
 
 	// ★追加: 「一度でも正常に接続できていたか」を保持（接続失敗の誤爆防止）
 	const wasConnectedRef = useRef(false);
+	const wsRef = useRef<WebSocket | null>(null);
 
 	// 「このフレームで押された」情報（Wii + キーボード合成）
 	const [pressed, setPressed] = useState<Partial<WiiState["buttons"]>>({});
@@ -131,6 +132,7 @@ export function useWiiController() {
 	// WebSocket (Wii)
 	useEffect(() => {
 		const ws = new WebSocket("ws://localhost:8080");
+		wsRef.current = ws;
 
 		ws.onopen = () => {
 			console.log("Connected to Wii Server");
@@ -207,6 +209,7 @@ export function useWiiController() {
 		};
 
 		return () => {
+			wsRef.current = null;
 			try {
 				ws.close();
 			} catch {}
@@ -267,10 +270,21 @@ export function useWiiController() {
 		setPressed(mergedPressed);
 	};
 
+	const sendWiiCommand = useCallback((type: string, data: any) => {
+		if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+			try {
+				wsRef.current.send(JSON.stringify({ type, ...data }));
+			} catch (err) {
+				console.error('Failed to send command to Wii server:', err);
+			}
+		}
+	}, []);
+
 	return {
 		wiiState,
 		pressed,
 		wiiConnected,
 		wiiDisconnectedAt,
+		sendWiiCommand,
 	};
 }

@@ -17,6 +17,30 @@ wss.on('listening', () => {
 });
 
 let isWiiConnected = false;
+let currentDevice: HID.HID | null = null;
+
+// Wiiリモコンのスピーカーで音を鳴らす関数
+function playWiiSound(sound: 'q' | 'w' | 'e') {
+    if (!currentDevice || !isWiiConnected) {
+        console.log('Cannot play sound: Wii Remote not connected');
+        return;
+    }
+    
+    try {
+        // 短いビープ音を鳴らす（周波数と長さで違いを出す）
+        const patterns: { [key: string]: number[] } = {
+            'q': [0x14, 0x01, 0xF0, 0x20, 0x40, 0x80], // 高音短
+            'w': [0x14, 0x01, 0xC0, 0x30, 0x60, 0x90], // 中音中
+            'e': [0x14, 0x01, 0xA0, 0x40, 0x80, 0xA0]  // 低音長
+        };
+        
+        const pattern = patterns[sound] || patterns['q'];
+        currentDevice.write(pattern);
+        console.log(`Playing sound ${sound} on Wii Remote speaker`);
+    } catch (err) {
+        console.error('Failed to play sound on Wii Remote:', err);
+    }
+}
 
 function setWiiConnected(next: boolean) {
     if (isWiiConnected === next) return;
@@ -36,6 +60,19 @@ wss.on('connection', (ws) => {
     try {
         ws.send(JSON.stringify({ type: 'status', connected: isWiiConnected }));
     } catch {}
+    
+    // クライアントからのメッセージを受信
+    ws.on('message', (message) => {
+        try {
+            const data = JSON.parse(message.toString());
+            if (data.type === 'playSound' && data.sound) {
+                playWiiSound(data.sound);
+            }
+        } catch (err) {
+            console.error('Failed to parse client message:', err);
+        }
+    });
+    
     ws.on('close', () => {
         clients = clients.filter(c => c !== ws);
     });
@@ -69,6 +106,7 @@ async function connectWiiRemote() {
 
     let device: HID.HID | null = null;
     let keepAliveInterval: NodeJS.Timeout | null = null; // ★追加: タイマー変数
+    currentDevice = null; // リセット
 
     // 2. 書き込み可能なデバイスを探す
     for (const devInfo of devices) {
@@ -83,6 +121,7 @@ async function connectWiiRemote() {
             
             console.log(">> Success! Connected.");
             device = tempDevice;
+            currentDevice = tempDevice; // グローバル変数に保存
             break;
         } catch (e) {
             // console.log(">> Failed to write to this interface.");
@@ -180,6 +219,7 @@ async function connectWiiRemote() {
         broadcast({ type: 'wiiDisconnected', at: Date.now(), reason: String(err) });
 
 		setWiiConnected(false);
+        currentDevice = null;
         // ★追加: 切断されたらタイマーを止める
         if (keepAliveInterval) clearInterval(keepAliveInterval);
         
@@ -193,6 +233,7 @@ async function connectWiiRemote() {
         broadcast({ type: 'wiiDisconnected', at: Date.now(), reason: 'close' });
 
     		setWiiConnected(false);
+        currentDevice = null;
          if (keepAliveInterval) clearInterval(keepAliveInterval);
     });
 }

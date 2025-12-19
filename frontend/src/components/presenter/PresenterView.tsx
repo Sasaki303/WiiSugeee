@@ -21,6 +21,9 @@ export function PresenterView() {
     const isMouseDrawingRef = useRef(false);
     const wasWiiADownRef = useRef(false);
 
+    // Wiiリモコンの状態を取得
+	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt, sendWiiCommand } = useWiiController();
+
     const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
     const playSound = useCallback((key: "q" | "w" | "e") => {
         const a = soundboardRef.current[key];
@@ -31,7 +34,9 @@ export function PresenterView() {
         } catch (err) {
             console.warn("sound play failed", key, err);
         }
-    }, []);
+		// Wiiリモコンのスピーカーでも再生
+		sendWiiCommand('playSound', { sound: key });
+	}, [sendWiiCommand]);
 
     const returnTo = useMemo(() => {
         return searchParams.get("from") === "editor" ? "/editor" : "/";
@@ -44,10 +49,6 @@ export function PresenterView() {
     const goBack = useCallback(() => {
         router.push(returnTo);
     }, [router, returnTo]);
-
-    // Wiiリモコンの状態を取得
-    const { wiiState, pressed, wiiConnected, wiiDisconnectedAt } = useWiiController();
-
     const [flow, setFlow] = useState<SerializedFlow | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
