@@ -21,66 +21,128 @@ function mapIrToScreen(irX: number, irY: number, screenW: number, screenH: numbe
 
 export function DrawingCanvas(props: DrawingCanvasProps) {
 	const { drawingPoints, wiiState, isPlaying, shouldPaint, eraserMode, eraserPosition } = props;
-	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
+	const cursorCanvasRef = useRef<HTMLCanvasElement>(null);
+	const lastDrawnIndexRef = useRef(0);
 
+	// キャンバスサイズ管理とリサイズ時の全再描画
 	useEffect(() => {
-		const canvas = canvasRef.current;
+		const handleResize = () => {
+			const width = window.innerWidth;
+			const height = window.innerHeight;
+
+			if (drawingCanvasRef.current) {
+				drawingCanvasRef.current.width = width;
+				drawingCanvasRef.current.height = height;
+				// リサイズされたらクリアされるので、全再描画が必要
+				lastDrawnIndexRef.current = 0;
+			}
+			if (cursorCanvasRef.current) {
+				cursorCanvasRef.current.width = width;
+				cursorCanvasRef.current.height = height;
+			}
+		};
+
+		// 初期サイズ設定
+		handleResize();
+
+		window.addEventListener("resize", handleResize);
+		return () => window.removeEventListener("resize", handleResize);
+	}, []);
+
+	// 描画レイヤー更新 (Drawing Layer) - 追記型
+	useEffect(() => {
+		const canvas = drawingCanvasRef.current;
 		const ctx = canvas?.getContext("2d");
 		if (!canvas || !ctx) return;
 
-		// キャンバスサイズをウィンドウに合わせる
-		if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
-			canvas.width = window.innerWidth;
-			canvas.height = window.innerHeight;
+		// リセット検知（配列が短くなった場合など）
+		if (drawingPoints.length < lastDrawnIndexRef.current) {
+			ctx.clearRect(0, 0, canvas.width, canvas.height);
+			lastDrawnIndexRef.current = 0;
 		}
 
-		// 画面クリア
-		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		// 描画不要なら終了
+		if (drawingPoints.length === lastDrawnIndexRef.current) return;
 
-		// 既存の線を描画（描画と消去を混在）
-		ctx.lineWidth = 5;
+		// 共通設定
 		ctx.lineCap = "round";
 		ctx.lineJoin = "round";
 
-		if (drawingPoints.length > 1) {
-			let started = false;
-			let currentMode: "draw" | "erase" = "draw";
-			
-			for (const p of drawingPoints) {
-				if (!p) {
-					if (started) {
-						ctx.stroke();
-						started = false;
-					}
-					continue;
-				}
-				
-				const newMode = p.mode || "draw";
-				
-				// モードが変わったら描画を確定してから新しいパスを開始
-				if (started && newMode !== currentMode) {
-					ctx.stroke();
-					started = false;
-				}
-				
-				if (!started) {
-					// 新しいパスの開始
-					currentMode = newMode;
-					ctx.globalCompositeOperation = currentMode === "erase" ? "destination-out" : "source-over";
-					ctx.strokeStyle = currentMode === "erase" ? "rgba(0,0,0,1)" : "red";
-					ctx.lineWidth = currentMode === "erase" ? 20 : 5;
+		// 追記ループ
+		for (let i = lastDrawnIndexRef.current; i < drawingPoints.length; i++) {
+			const p = drawingPoints[i];
+			if (!p) continue; // 区切り
+
+			const prev = i > 0 ? drawingPoints[i - 1] : null;
+			const mode = p.mode || "draw";
+
+			// 始点かどうか（配列の先頭、または直前がnull、またはモードが変わった場合）
+			const isStart = !prev || prev.mode !== p.mode;
+
+			if (isStart) {
+				// 始点処理
+				if (mode === "erase") {
+					// 消しゴム始点スタンプ
+					ctx.globalCompositeOperation = "destination-out";
+					ctx.fillStyle = "rgba(0,0,0,0.1)";
+					ctx.shadowBlur = 30;
+					ctx.shadowColor = "rgba(0,0,0,0.1)";
 					ctx.beginPath();
-					ctx.moveTo(p.x, p.y);
-					started = true;
-				} else {
+					ctx.arc(p.x, p.y, 60, 0, Math.PI * 2);
+					ctx.fill();
+				}
+				// drawモードの始点はmoveToだけなので、ここでは何もしない（次の点で線を引く）
+			} else {
+				// 接続処理 (prev -> p)
+				if (mode === "draw") {
+					ctx.globalCompositeOperation = "source-over";
+					ctx.strokeStyle = "red";
+					ctx.lineWidth = 5;
+					ctx.shadowBlur = 0;
+					ctx.shadowColor = "transparent";
+
+					ctx.beginPath();
+					ctx.moveTo(prev!.x, prev!.y);
 					ctx.lineTo(p.x, p.y);
+					ctx.stroke();
+				} else {
+					// erase 補間
+					ctx.globalCompositeOperation = "destination-out";
+					ctx.fillStyle = "rgba(0,0,0,0.1)";
+					ctx.shadowBlur = 30;
+					ctx.shadowColor = "rgba(0,0,0,0.1)";
+
+					const dist = Math.hypot(p.x - prev!.x, p.y - prev!.y);
+					const angle = Math.atan2(p.y - prev!.y, p.x - prev!.x);
+					const step = 15;
+
+					for (let d = step; d <= dist; d += step) {
+						const bx = prev!.x + Math.cos(angle) * d;
+						const by = prev!.y + Math.sin(angle) * d;
+						ctx.beginPath();
+						ctx.arc(bx, by, 60, 0, Math.PI * 2);
+						ctx.fill();
+					}
+					// 終点
+					ctx.beginPath();
+					ctx.arc(p.x, p.y, 60, 0, Math.PI * 2);
+					ctx.fill();
 				}
 			}
-			if (started) ctx.stroke();
-			
-			// コンポジットモードをリセット
-			ctx.globalCompositeOperation = "source-over";
 		}
+
+		// インデックス更新
+		lastDrawnIndexRef.current = drawingPoints.length;
+	}, [drawingPoints]);
+
+	// カーソルレイヤー更新 (Cursor Layer) - 毎フレーム更新
+	useEffect(() => {
+		const canvas = cursorCanvasRef.current;
+		const ctx = canvas?.getContext("2d");
+		if (!canvas || !ctx) return;
+
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
 
 		// 消しゴムカーソル表示（eraserModeがtrueの時）
 		if (eraserMode && eraserPosition) {
@@ -89,7 +151,7 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
 			ctx.lineWidth = 2;
 			ctx.setLineDash([5, 5]);
 			ctx.beginPath();
-			ctx.arc(eraserPosition.x, eraserPosition.y, 10, 0, Math.PI * 2);
+			ctx.arc(eraserPosition.x, eraserPosition.y, 60, 0, Math.PI * 2);
 			ctx.stroke();
 			ctx.setLineDash([]);
 			ctx.restore();
@@ -106,12 +168,18 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
 			ctx.arc(pos.x, pos.y, 10, 0, Math.PI * 2);
 			ctx.fill();
 		}
-	}, [wiiState, drawingPoints, shouldPaint, eraserMode, eraserPosition]);
+	}, [wiiState, eraserMode, eraserPosition]);
 
 	return (
-		<canvas
-			ref={canvasRef}
-			style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
-		/>
+		<>
+			<canvas
+				ref={drawingCanvasRef}
+				style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
+			/>
+			<canvas
+				ref={cursorCanvasRef}
+				style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
+			/>
+		</>
 	);
 }
