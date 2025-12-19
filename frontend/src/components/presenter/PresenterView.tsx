@@ -288,20 +288,19 @@ export function PresenterView() {
 			
 			// ペイントと消しゴムを切り替え (X) - Wiiボタンと同じ挙動
 			if (e.key === "x" || e.key === "X") {
-				if (!e.repeat) {
-					if (eraserMode) {
-						// 解除
-						setEraserMode(false);
-						setEraserButtonName(null);
-						setCursorPos(null);
-					} else {
-						// ON
-						setEraserMode(true);
-						setEraserButtonName("X");
-						// カーソルを画面中央に
-						setCursorPos({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-					}
-				}
+                // 押しっぱなしでON/OFFが暴れないように、リピートは無視
+                if (e.repeat) return;
+                setEraserMode((prev) => {
+                    const next = !prev;
+                    if (next) {
+                        setEraserButtonName("X");
+                        setCursorPos({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                    } else {
+                        setEraserButtonName(null);
+                        setCursorPos(null);
+                    }
+                    return next;
+                });
 				return;
 			}
 			
@@ -779,8 +778,8 @@ export function PresenterView() {
                         position: "absolute",
                         left: cursorPos.x,
                         top: cursorPos.y,
-                        width: 40,
-                        height: 40,
+                        width: 120,
+                        height: 120,
                         borderRadius: "50%",
                         border: "3px dashed rgba(255, 100, 100, 0.8)",
                         background: "rgba(255, 100, 100, 0.2)",
