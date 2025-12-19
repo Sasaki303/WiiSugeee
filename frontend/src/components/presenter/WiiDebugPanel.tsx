@@ -69,7 +69,22 @@ export function WiiDebugPanel({ wiiState, pressed, effectiveProjectBindings }: W
 
 	// バインディング情報の更新（レンダリング中に直接更新）
 	const entries = Object.entries(effectiveProjectBindings) as Array<[string, BindingAction | undefined]>;
-	entries.sort((a, b) => a[0].localeCompare(b[0]));
+	
+	// 指定された順序でソート（ボタン名の大文字小文字に注意）
+	const buttonOrder = ["Up", "Down", "Right", "Left", "A", "B", "Minus", "Home", "Plus", "One", "Two"];
+	entries.sort((a, b) => {
+		const indexA = buttonOrder.indexOf(a[0]);
+		const indexB = buttonOrder.indexOf(b[0]);
+		// 両方とも順序リストにある場合は順序に従う
+		if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+		// aのみ順序リストにある場合はaを前に
+		if (indexA !== -1) return -1;
+		// bのみ順序リストにある場合はbを前に
+		if (indexB !== -1) return 1;
+		// 両方とも順序リストにない場合はアルファベット順
+		return a[0].localeCompare(b[0]);
+	});
+	
 	const currentBindings = entries.map(
 		([btn, action]) => `${btn.padEnd(8)} → ${action ? formatAction(action) : "(unassigned)"}`
 	);

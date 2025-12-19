@@ -50,7 +50,7 @@ export function formatAction(a: BindingAction): string {
 		case "paint":
 			return "PAINT🎨";
 		case "eraser":
-			return "ERASER🧹";
+			return "ERASER";
 		case "sound":
 			switch (a.kind) {
 				case "shot":

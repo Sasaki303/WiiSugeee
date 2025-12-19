@@ -53,6 +53,7 @@ export function PresenterView() {
     const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
     const [startedWithWii, setStartedWithWii] = useState(false);
     const [playingSince, setPlayingSince] = useState<number>(0);
+    const [showDebugPanel, setShowDebugPanel] = useState(true);
 
     const pdfDocCacheRef = useRef<Map<string, Promise<any>>>(new Map());
 
@@ -78,6 +79,19 @@ export function PresenterView() {
 			soundboardRef.current = {};
 		};
 	}, []);
+
+    // スペースキーでデバッグパネルの表示/非表示を切り替え
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.code === "Space" && e.target === document.body) {
+                e.preventDefault();
+                setShowDebugPanel(prev => !prev);
+            }
+        };
+        
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, []);
 
     const getOrLoadPdfDocument = useCallback(async (assetId: string) => {
         const cached = pdfDocCacheRef.current.get(assetId);
@@ -722,15 +736,17 @@ export function PresenterView() {
             />
 
             {/* デバッグ情報 (右上) */}
-            <WiiDebugPanel
-                wiiState={wiiState}
-                pressed={pressed}
-                effectiveProjectBindings={effectiveProjectBindings}
-            />
+            {showDebugPanel && (
+                <WiiDebugPanel
+                    wiiState={wiiState}
+                    pressed={pressed}
+                    effectiveProjectBindings={effectiveProjectBindings}
+                />
+            )}
 
             {/* 操作ガイド (左下) */}
             <div style={{ position: "absolute", bottom: 20, left: 20, color: "rgba(255,255,255,0.5)", fontSize: 14, pointerEvents: "none" }}>
-                [ESC] 戻る
+                [ESC] 戻る | [SPACE] デバッグ表示切替
             </div>
 
             {/* 消しゴムモード表示 */}
