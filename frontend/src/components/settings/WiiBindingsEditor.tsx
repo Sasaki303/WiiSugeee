@@ -222,11 +222,13 @@ function toAction(funcId: FuncId): ButtonBindings[keyof ButtonBindings] {
 		case "REMOVE":
 			return { type: "remove" };
 		case "UP":
+			return { type: "none", subtype: "UP" };
 		case "DOWN":
+			return { type: "none", subtype: "DOWN" };
 		case "A":
+			return { type: "none", subtype: "A" };
 		case "B":
-			// まだ具体アクションが無いので none 扱い（将来拡張）
-			return { type: "none" };
+			return { type: "none", subtype: "B" };
 		default:
 			return { type: "none" };
 	}
@@ -254,6 +256,7 @@ function fromAction(a: ButtonBindings[keyof ButtonBindings] | undefined, fallbac
 	if (a.type === "prev") return "PREV";
 	if (a.type === "reaction") return a.kind === "clap" ? "CLAP" : "SMILE";
 	if (a.type === "paint") return "PAINT";
+	if (a.type === "eraser") return "ERASER";
 	if (a.type === "remove") return "REMOVE";
 	if (a.type === "sound") {
 		if (a.kind === "shot") return "SHOT";
@@ -278,6 +281,13 @@ function fromAction(a: ButtonBindings[keyof ButtonBindings] | undefined, fallbac
 		if (a.kind === "A") return "PLUS";
 		if (a.kind === "B") return "MINUS";
 		return "HOME";
+	}
+	if (a.type === "none" && "subtype" in a) {
+		const subtype = (a as any).subtype;
+		if (subtype === "UP") return "UP";
+		if (subtype === "DOWN") return "DOWN";
+		if (subtype === "A") return "A";
+		if (subtype === "B") return "B";
 	}
 	return fallback;
 }
@@ -367,22 +377,25 @@ export function WiiBindingsEditor(props: { onBack?: () => void }) {
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
 
-    // 検索UIは不要
-    const filteredFuncs = funcs;
+	// 機能ブロックをカテゴリごとにグループ化
+	const groupedFuncs = useMemo(() => {
+		const navigation: FuncId[] = ["NEXT", "PREV", "HOME"];
+		const reactions: FuncId[] = ["CLAP", "SMILE"];
+		const branches: FuncId[] = [...funcs.filter(f => f.startsWith("CASE_"))];
+		const tools: FuncId[] = ["PAINT", "ERASER", "REMOVE"];
+		const sounds: FuncId[] = ["SHOT", "OH", "UXO"];
+		const others: FuncId[] = ["PLUS", "MINUS", "UP", "DOWN", "A", "B"];
+		return [
+			{ label: "ナビゲーション", funcs: navigation },
+			{ label: "リアクション", funcs: reactions },
+			{ label: "分岐", funcs: branches },
+			{ label: "ツール", funcs: tools },
+			{ label: "サウンド", funcs: sounds },
+			{ label: "その他", funcs: others },
+		];
+	}, [funcs]);
 
-    const assign = (slot: SlotId, funcId: FuncId) => {
-        setBindings((prev) => ({ ...prev, [slot]: funcId }));
-    };
-
-    const swap = (a: SlotId, b: SlotId) => {
-        setBindings((prev) => {
-            const next = { ...prev };
-            const tmp = next[a];
-            next[a] = next[b];
-            next[b] = tmp;
-            return next;
-        });
-    };
+	const totalFuncs = groupedFuncs.reduce((sum, g) => sum + g.funcs.length, 0);
 
     const onDropSlot = (slot: SlotId) => (e: React.DragEvent) => {
         e.preventDefault();
@@ -594,7 +607,7 @@ export function WiiBindingsEditor(props: { onBack?: () => void }) {
 		>
 			<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
 				<div style={{ fontWeight: 700, fontSize: 13 }}>機能ブロック</div>
-				<div style={{ fontSize: 12, color: "#6b7280" }}>{filteredFuncs.length} 件</div>
+				<div style={{ fontSize: 12, color: "#6b7280" }}>{totalFuncs} 件</div>
 			</div>
 
 			<div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
@@ -652,41 +665,56 @@ export function WiiBindingsEditor(props: { onBack?: () => void }) {
 
 			<div
 				style={{
-					display: "grid",
-					gridTemplateColumns: "repeat(6, 1fr)",
-					gap: 6,
 					flex: 1,
 					minHeight: 0,
 					overflow: "auto",
+					display: "flex",
+					flexDirection: "column",
+					gap: 12,
 				}}
 			>
-				{filteredFuncs.map((f) => (
-					<div
-						key={f}
-						draggable
-						onDragStart={(e) => setTransfer(e, { kind: "func", funcId: f })}
-						style={{
-							border: "1px solid #111827",
-							borderRadius: 12,
-							padding: "0 6px",
-							background: "#111827",
-							color: "#fff",
-							userSelect: "none",
-							cursor: "grab",
-							fontSize: 12,
-							fontWeight: 800,
-							height: 36,
-							display: "flex",
-							alignItems: "center",
-							justifyContent: "center",
-							letterSpacing: 0.2,
-							overflow: "hidden",
-							whiteSpace: "nowrap",
-							textOverflow: "ellipsis",
-						}}
-						title="ドラッグして割り当て"
-					>
-						{funcLabel(f)}
+				{groupedFuncs.map((group) => (
+					<div key={group.label}>
+						<div style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", marginBottom: 6, letterSpacing: 0.5 }}>
+							{group.label}
+						</div>
+						<div
+							style={{
+								display: "grid",
+								gridTemplateColumns: "repeat(3, 1fr)",
+								gap: 6,
+							}}
+						>
+							{group.funcs.map((f) => (
+								<div
+									key={f}
+									draggable
+									onDragStart={(e) => setTransfer(e, { kind: "func", funcId: f })}
+									style={{
+										border: "1px solid #111827",
+										borderRadius: 12,
+										padding: "0 6px",
+										background: "#111827",
+										color: "#fff",
+										userSelect: "none",
+										cursor: "grab",
+										fontSize: 12,
+										fontWeight: 800,
+										height: 36,
+										display: "flex",
+										alignItems: "center",
+										justifyContent: "center",
+										letterSpacing: 0.2,
+										overflow: "hidden",
+										whiteSpace: "nowrap",
+										textOverflow: "ellipsis",
+									}}
+									title="ドラッグして割り当て"
+								>
+									{funcLabel(f)}
+								</div>
+							))}
+						</div>
 					</div>
 				))}
 			</div>

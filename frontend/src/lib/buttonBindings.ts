@@ -3,7 +3,7 @@ import type { WiiState } from "@/hooks/useWiiController";
 export type WiiButton = keyof WiiState["buttons"];
 
 export type BindingAction =
-	| { type: "none" }
+	| { type: "none"; subtype?: string }
 	| { type: "next" }
 	| { type: "prev" }
 	| { type: "branch"; kind: "A" | "B" | "HOME" }
