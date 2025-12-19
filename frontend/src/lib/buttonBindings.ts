@@ -10,6 +10,7 @@ export type BindingAction =
 	| { type: "branchIndex"; index: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 }
 	| { type: "reaction"; kind: "clap" | "laugh" }
 	| { type: "paint" }
+	| { type: "eraser" }
 	| { type: "sound"; kind: "shot" | "oh" | "uxo" }
 	| { type: "remove" };
 
@@ -48,6 +49,8 @@ export function formatAction(a: BindingAction): string {
 			return a.kind === "clap" ? "拍手" : "笑い";
 		case "paint":
 			return "PAINT🎨";
+		case "eraser":
+			return "ERASER🧹";
 		case "sound":
 			switch (a.kind) {
 				case "shot":

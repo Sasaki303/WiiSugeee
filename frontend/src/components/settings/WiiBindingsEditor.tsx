@@ -27,6 +27,7 @@ type FuncId =
 	| "CASE_H"
 	| "CASE_I"
 	| "PAINT"
+	| "ERASER"
 	| "SHOT"
 	| "OH"
 	| "UXO"
@@ -113,6 +114,8 @@ function funcLabel(f: FuncId): string {
             return "B";
         case "PAINT":
             return "PAINT🎨";
+        case "ERASER":
+            return "ERASER";
         case "SHOT":
             return "SHOT🔊";
         case "OH":
@@ -164,7 +167,7 @@ function getTransfer(e: React.DragEvent): DragPayload | null {
 }
 
 function allFuncs(maxCase: number): FuncId[] {
-    const base: FuncId[] = ["NEXT", "PREV", "HOME", "CLAP", "SMILE", "PLUS", "MINUS", "UP", "DOWN", "A", "B", "PAINT", "SHOT", "OH", "UXO", "REMOVE"];
+    const base: FuncId[] = ["NEXT", "PREV", "HOME", "CLAP", "SMILE", "PLUS", "MINUS", "UP", "DOWN", "A", "B", "PAINT", "ERASER", "SHOT", "OH", "UXO", "REMOVE"];
     const cases: FuncId[] = ["CASE_A", "CASE_B", "CASE_C", "CASE_D", "CASE_E", "CASE_F", "CASE_G", "CASE_H", "CASE_I"].slice(
         0,
         Math.max(0, Math.min(9, maxCase)),
@@ -208,6 +211,8 @@ function toAction(funcId: FuncId): ButtonBindings[keyof ButtonBindings] {
 			return { type: "branchIndex", index: 9 };
 		case "PAINT":
 			return { type: "paint" };
+		case "ERASER":
+			return { type: "eraser" };
 		case "SHOT":
 			return { type: "sound", kind: "shot" };
 		case "OH":
