@@ -767,7 +767,7 @@ export function PresenterView() {
                         pointerEvents: "none",
                     }}
                 >
-                    🧹 消しゴムモード ON<br/>
+                    消しゴムモード ON<br/>
                     <small style={{ fontSize: 11 }}>左クリックまたはA+Bで消去 | {eraserButtonName}で解除</small>
                 </div>
             )}
