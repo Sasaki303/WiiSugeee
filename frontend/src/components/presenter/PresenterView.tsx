@@ -19,6 +19,7 @@ export function PresenterView() {
     const searchParams = useSearchParams();
     const containerRef = useRef<HTMLDivElement | null>(null);
     const isMouseDrawingRef = useRef(false);
+    const [isPainting, setIsPainting] = useState(false);
     const wasWiiADownRef = useRef(false);
 
     // Wiiリモコンの状態を取得
@@ -602,6 +603,7 @@ export function PresenterView() {
                 // 消しゴムモード中は左クリックで消去開始
                 if (eraserMode) {
                     isMouseDrawingRef.current = true;
+                    setIsPainting(false); // 消しゴムモード中はペンカーソルにしない
                     setDrawingPoints((prev) => {
                         const next = prev.slice();
                         if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
@@ -613,6 +615,7 @@ export function PresenterView() {
                 
                 // 通常モード：左クリックで描画開始
                 isMouseDrawingRef.current = true;
+                setIsPainting(true); // ペンカーソルに変更
                 setDrawingPoints((prev) => {
                     const next = prev.slice();
                     if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
@@ -679,13 +682,16 @@ export function PresenterView() {
             onMouseUp={() => {
                 if (!isMouseDrawingRef.current) return;
                 isMouseDrawingRef.current = false;
+                setIsPainting(false); // ペンカーソル解除
                 setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
             }}
             onMouseLeave={() => {
                 if (!isMouseDrawingRef.current) return;
                 isMouseDrawingRef.current = false;
+                setIsPainting(false); // ペンカーソル解除
                 setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
             }}
+            className={isPainting ? 'presenter-painting' : 'presenter-container'}
             style={{
                 position: "relative",
                 width: "100vw",
