@@ -213,7 +213,9 @@ function playSoundOnWiiInternal(soundType: 'shot' | 'oh' | 'uxo') {
 
         const chunkSize = 20;
         const sampleRate = 2000;
-        const chunkMs = (chunkSize / sampleRate) * 1000; // 10ms per chunk
+        // Wiiリモコンの実際のバッファ処理速度に合わせた送信間隔
+        // 理論値10msでは速すぎるため、15msに設定
+        const chunkMs = 15;
 
         const totalChunks = Math.ceil(dataToSend.length / chunkSize);
         let chunkIndex = 0;
@@ -222,29 +224,8 @@ function playSoundOnWiiInternal(soundType: 'shot' | 'oh' | 'uxo') {
         packet[0] = 0x18;
         packet[1] = 0xA0;
 
-        console.log(`Total chunks: ${totalChunks}, Duration: ${(totalChunks * chunkMs).toFixed(0)}ms`);
+        console.log(`Starting playback: ${totalChunks} chunks, ${chunkMs}ms interval, Duration: ${(totalChunks * chunkMs).toFixed(0)}ms`);
 
-        // 最初に10パケット分を高速送信してバッファを満たす
-        const initialBurstSize = Math.min(10, totalChunks);
-        for (let i = 0; i < initialBurstSize; i++) {
-            const offset = i * chunkSize;
-            for (let j = 0; j < chunkSize; j++) {
-                packet[2 + j] = dataToSend[offset + j] ?? 0;
-            }
-            if (currentDevice) {
-                try {
-                    currentDevice.write(packet);
-                } catch (e) {
-                    console.error('Error in initial burst:', e);
-                    isPlayingAudio = false;
-                    return;
-                }
-            }
-        }
-        chunkIndex = initialBurstSize;
-        console.log(`Initial burst sent: ${initialBurstSize} chunks`);
-
-        // 残りのチャンクを定期的に送信
         const tick = () => {
             if (!currentDevice) {
                 console.log('Device disconnected during playback');
@@ -281,14 +262,12 @@ function playSoundOnWiiInternal(soundType: 'shot' | 'oh' | 'uxo') {
 
             chunkIndex++;
 
-            // 次のチャンクを送信（固定間隔）
+            // 次のチャンクを送信
             setTimeout(tick, chunkMs);
         };
 
-        // 初期バースト後、定期送信を開始
-        if (chunkIndex < totalChunks) {
-            setTimeout(tick, chunkMs);
-        }
+        // 最初のチャンクを送信開始
+        tick();
     } catch (err) {
         console.error('Failed to play sound on Wii:', err);
         isPlayingAudio = false;
