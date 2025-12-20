@@ -12,7 +12,8 @@ export type BindingAction =
 	| { type: "paint" }
 	| { type: "eraser" }
 	| { type: "sound"; kind: "shot" | "oh" | "uxo" }
-	| { type: "remove" };
+	| { type: "remove" }
+	| { type: "irSens" }; // ★追加: IRセンサーカーソル切替
 
 export type ButtonBindings = Partial<Record<WiiButton, BindingAction>>;
 
@@ -62,6 +63,8 @@ export function formatAction(a: BindingAction): string {
 			}
 		case "remove":
 			return "REMOVE";
+		case "irSens":
+			return "IRSens切替";
 	}
 }
 
