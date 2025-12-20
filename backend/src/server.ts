@@ -107,6 +107,13 @@ let irCursorEnabled = false;
 let lastCursor: { x: number; y: number } | null = null;
 let lastIrPoints: { x: number; y: number }[] = [];
 const SMOOTHING_FACTOR = 0.3; // 0に近いほど滑らか（遅延増）、1に近いほど即応（ジッタ増）
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+import { performance } from 'perf_hooks';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // WiiリモコンのID定義
 const VENDOR_ID = 0x057e;
@@ -124,6 +131,9 @@ wss.on('listening', () => {
 });
 
 let isWiiConnected = false;
+let currentDevice: HID.HID | null = null; // ★追加: 現在のデバイスを保持
+let speakerInitialized = false; // スピーカーが初期化済みかどうか
+let isPlayingAudio = false;
 
 function setWiiConnected(next: boolean) {
     if (isWiiConnected === next) return;
@@ -133,8 +143,250 @@ function setWiiConnected(next: boolean) {
     // ★追加: 切断に遷移した瞬間をフロントへ通知（ポップアップ表示トリガー）
     if (!isWiiConnected) {
         broadcast({ type: 'wiiDisconnected', at: Date.now() });
+        speakerInitialized = false; // 切断時にスピーカー初期化フラグをリセット
     }
 }
+
+// Wiiリモコンのスピーカーを初期化
+function initSpeaker() {
+    if (!currentDevice || speakerInitialized) return;
+
+    try {
+        console.log('=== Initializing Wii Remote speaker ===');
+
+        // // 0. データレポートモードを0x30に変更（スピーカー用）
+        // console.log('Setting data report mode to 0x30...');
+        // currentDevice.write([0x12, 0x00, 0x30]);
+
+        // 少し待機
+        setTimeout(() => {
+            if (!currentDevice) return;
+
+            // 1. スピーカーの有効化 (0x14へ0x04を送信)
+            console.log('Enabling speaker...');
+            currentDevice.write([0x14, 0x04]);
+
+            // 2. スピーカーのミュート (0x19へ0x04を送信)
+            console.log('Muting speaker...');
+            currentDevice.write([0x19, 0x04]);
+
+            // 少し待機してからレジスタ設定
+            setTimeout(() => {
+                if (!currentDevice) return;
+
+                // 3. レジスタ0xa20009へ0x01を書き込み
+                console.log('Writing to register 0xa20009...');
+                currentDevice.write([0x16, 0x04, 0xa2, 0x00, 0x09, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+
+                // 4. レジスタ0xa20001へ0x08を書き込み
+                console.log('Writing to register 0xa20001 (0x08)...');
+                currentDevice.write([0x16, 0x04, 0xa2, 0x00, 0x01, 0x01, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+
+                // 5. レジスタ0xa20001へ7-byte configurationを書き込み
+                // 00 40 70 17 50 00 00
+                // 40: 8bit PCM, 70 17: 2kHz (リトルエンディアン 6000 = 0x1770, 12000000/2000=6000), 50: ボリューム
+                console.log('Writing 7-byte configuration...');
+                // 5. サンプルレート設定 (0x17へ書き込み)
+                // 12MHz / 2000Hz = 6000 = 0x1770 (リトルエンディアン: 70 17)
+                console.log('Setting sample rate to 2000Hz...');
+                currentDevice.write([
+                    0x16, 0x04, 0xa2, 0x00, 0x01, 0x07,
+                    0x00, 0x40, 0x70, 0x17, 0x50, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+                ]);
+
+                // 6. レジスタ0xa20008へ0x01を書き込み
+                console.log('Writing to register 0xa20008...');
+                currentDevice.write([0x16, 0x04, 0xa2, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+
+                // 7. ミュート解除 (0x19へ0x00を送信)
+                console.log('Unmuting speaker...');
+                currentDevice.write([0x19, 0x00]);
+
+                speakerInitialized = true;
+                console.log('=== Speaker initialized successfully ===');
+            }, 50);
+        }, 50);
+
+    } catch (err) {
+        console.error('Failed to initialize speaker:', err);
+        speakerInitialized = false;
+    }
+}
+
+// 簡易的なビープ音を生成（8bit Signed PCM）
+function generateBeep(frequency: number, durationMs: number): Buffer {
+    // Wiiリモコン側のスピーカー設定に合わせる
+    const sampleRate = 2000;
+    const samples = Math.floor((sampleRate * durationMs) / 1000);
+    const buffer = Buffer.alloc(samples);
+
+    for (let i = 0; i < samples; i++) {
+        // サイン波生成
+        const t = i / sampleRate;
+        const value = Math.sin(2 * Math.PI * frequency * t);
+
+        // エンベロープ
+        let envelope = 1.0;
+        const totalTime = durationMs / 1000;
+        if (t < 0.02) envelope = t / 0.02;
+        else if (t > totalTime - 0.05) envelope = (totalTime - t) / 0.05;
+
+        // Signed 8-bit PCM (-128 to 127)
+        // 振幅を控えめに設定して音割れを防止 (50程度)
+        const scaled = Math.floor(value * envelope * 50);
+        buffer.writeInt8(Math.max(-128, Math.min(127, scaled)), i);
+    }
+
+    return buffer;
+}
+
+// 音声ファイルから読み込む（.rawファイルがある場合）
+function loadAudioFile(soundType: 'shot' | 'oh' | 'uxo'): Buffer | null {
+    try {
+        const filename = soundType === 'uxo' ? 'uxo.raw' : `${soundType}.raw`;
+        const filepath = path.join(__dirname, '..', 'sounds', filename);
+
+        if (fs.existsSync(filepath)) {
+            console.log(`Loading audio file: ${filename}`);
+            const data = fs.readFileSync(filepath);
+            // ファイルは既にSigned 8-bit PCMとして変換されている前提
+            // そのままBufferとして返す
+            console.log(`Loaded ${data.length} bytes from ${filename}`);
+            return data;
+        }
+    } catch (err) {
+        console.error(`Failed to load audio file for ${soundType}:`, err);
+    }
+
+    return null;
+}
+
+// Wiiリモコンのスピーカーで音を鳴らす
+function playSoundOnWii(soundType: 'shot' | 'oh' | 'uxo') {
+    // ★再生中ならスキップ（接続状態に関係なく）
+    if (isPlayingAudio) {
+        console.log('Audio is already playing, skipping.');
+        return;
+    }
+
+    if (!currentDevice || !isWiiConnected) {
+        console.log('Cannot play sound: Wii Remote not connected');
+        return;
+    }
+
+    console.log(`Playing sound: ${soundType}`);
+
+    // スピーカーが初期化されていなければ初期化
+    if (!speakerInitialized) {
+        console.log('Speaker not initialized, initializing now...');
+        initSpeaker();
+        // 初期化後、少し待ってから音声送信
+        setTimeout(() => playSoundOnWiiInternal(soundType), 200);
+    } else {
+        playSoundOnWiiInternal(soundType);
+    }
+}
+
+
+function playSoundOnWiiInternal(soundType: 'shot' | 'oh' | 'uxo') {
+    if (!currentDevice) return;
+
+    // スピーカーが初期化されていない場合は初期化
+    if (!speakerInitialized) {
+        console.log('Speaker not initialized, initializing...');
+        initSpeaker();
+        // 初期化完了を待ってから再生
+        setTimeout(() => playSoundOnWiiInternal(soundType), 200);
+        return;
+    }
+
+    try {
+        console.log(`Generating audio data for: ${soundType}`);
+
+        const soundConfigs = {
+            'shot': { freq: 600, duration: 150 },
+            'oh': { freq: 350, duration: 250 },
+            'uxo': { freq: 250, duration: 200 }
+        } as const;
+
+        const config = soundConfigs[soundType] ?? soundConfigs['shot'];
+
+        let audioData = loadAudioFile(soundType);
+        if (!audioData) {
+            console.log(`Audio file not found, generating beep for: ${soundType}`);
+            audioData = generateBeep(config.freq, config.duration);
+        }
+
+        console.log(`Audio data size: ${audioData.length} bytes`);
+
+        // ★パケット送信ループ
+        isPlayingAudio = true;
+
+        const chunkSize = 20;
+        const sampleRate = 2000;
+        // Wiiリモコンの実際のバッファ処理能力に合わせた送信間隔
+        // 実測値に基づき20msに設定（遅めに送ってバッファオーバーフローを防ぐ）
+        const chunkMs = 20;
+
+        const totalChunks = Math.ceil(audioData.length / chunkSize);
+        let chunkIndex = 0;
+
+        // レポートID 0x18、サイズフィールド（20バイトを示す）
+        const packet: number[] = new Array(22).fill(0);
+        packet[0] = 0x18; // スピーカーデータレポート
+        packet[1] = (chunkSize << 3); // サイズフィールド: 20 << 3 = 0xA0
+
+        console.log(`Starting playback: ${totalChunks} chunks, ${chunkMs}ms interval, theoretical duration: ${(totalChunks * chunkSize / sampleRate * 1000).toFixed(0)}ms`);
+
+        const tick = () => {
+            if (!currentDevice) {
+                console.log('Device disconnected during playback');
+                isPlayingAudio = false;
+                return;
+            }
+
+            if (chunkIndex >= totalChunks) {
+                console.log(`Playback complete. Sent ${chunkIndex} chunks`);
+                isPlayingAudio = false;
+                return;
+            }
+
+            const offset = chunkIndex * chunkSize;
+
+            // 20バイト詰める（足りない分は0でパディング）
+            for (let i = 0; i < chunkSize; i++) {
+                packet[2 + i] = audioData[offset + i] ?? 0;
+            }
+
+            const dev = currentDevice;
+            if (!dev) {
+                isPlayingAudio = false;
+                return;
+            }
+
+            try {
+                dev.write(packet);
+            } catch (e) {
+                console.error('Error sending audio packet:', e);
+                isPlayingAudio = false;
+                return;
+            }
+
+            chunkIndex++;
+
+            // 次のチャンクを送信
+            setTimeout(tick, chunkMs);
+        };
+
+        // 最初のチャンクを送信開始
+        tick();
+    } catch (err) {
+        console.error('Failed to play sound on Wii:', err);
+        isPlayingAudio = false;
+    }
+}
+
 
 wss.on('connection', (ws) => {
     clients.push(ws);
@@ -142,7 +394,7 @@ wss.on('connection', (ws) => {
     // 接続直後に現在の状態を通知
     try {
         ws.send(JSON.stringify({ type: 'status', connected: isWiiConnected, irCursorEnabled }));
-    } catch { }
+    } catch {  }
     ws.on('close', () => {
         clients = clients.filter(c => c !== ws);
     });
@@ -157,6 +409,18 @@ wss.on('connection', (ws) => {
                 broadcast({ type: 'irCursorStatus', enabled: irCursorEnabled });
             }
         } catch { }
+    });
+
+    // ★追加: クライアントからのメッセージを受信（Wiiリモコンへの音声再生要求）
+    ws.on('message', (data) => {
+        try {
+            const msg = JSON.parse(data.toString());
+            if (msg.type === 'playSound' && msg.soundType) {
+                playSoundOnWii(msg.soundType);
+            }
+        } catch (e) {
+            console.error('Failed to parse client message:', e);
+        }
     });
 });
 
@@ -180,6 +444,7 @@ async function connectWiiRemote() {
     if (devices.length === 0) {
         console.log('Wii Remote not found. Waiting...');
         setWiiConnected(false);
+        setWiiConnected(false);
         setTimeout(connectWiiRemote, 3000);
         return;
     }
@@ -193,12 +458,14 @@ async function connectWiiRemote() {
     for (const devInfo of devices) {
         if (!devInfo.path) continue;
 
+
         try {
             console.log(`Testing path: ${devInfo.path}`);
             const tempDevice = new HID.HID(devInfo.path);
 
             // 疎通確認
             tempDevice.write([0x11, 0x10]);
+
 
             console.log(">> Success! Connected.");
             device = tempDevice;
@@ -211,9 +478,13 @@ async function connectWiiRemote() {
     if (!device) {
         console.error("Could not connect to any device interfaces. Retrying...");
         setWiiConnected(false);
+        setWiiConnected(false);
         setTimeout(connectWiiRemote, 3000);
         return;
     }
+
+    // ★追加: デバイスを保持
+    currentDevice = device;
 
     // 3. 機能の初期化
     try {
@@ -228,6 +499,11 @@ async function connectWiiRemote() {
 
         // IR初期化後にも念のため再設定（状態変化でモードが戻るケースの保険）
         await setReportMode37(device);
+        device.write([0x12, 0x00, 0x37]);
+        device.write([0x13, 0x04]);
+        device.write([0x1a, 0x04]);
+        device.write([0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x90, 0x00, 0x41]);
+        device.write([0x17, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x90, 0x00, 0x41]);
 
         console.log("Initialization complete.");
         setWiiConnected(true);
@@ -244,6 +520,7 @@ async function connectWiiRemote() {
 
     } catch (err) {
         console.error("Initialization failed:", err);
+        setWiiConnected(false);
         setWiiConnected(false);
         device.close();
         setTimeout(connectWiiRemote, 1000);
@@ -347,7 +624,7 @@ async function connectWiiRemote() {
             console.log(`[RAW BTN] b1=0x${b1.toString(16).padStart(2, '0')} b2=0x${b2.toString(16).padStart(2, '0')}`);
 
             if (irDots.length > 0) {
-                const irStr = irDots.map((p, i) => `IR${i + 1}:(${p.x},${p.y})`).join(' ');
+                const irStr = irDots.map((p: { x: number; y: number }, i: number) => `IR${i + 1}:(${p.x},${p.y})`).join(' ');
                 console.log(`[IR] ${irDots.length} points detected: ${irStr}`);
             } else {
                 // IRが見えていない時も定期的にログ
@@ -411,6 +688,7 @@ async function connectWiiRemote() {
     });
 
     device.on('error', (err) => {
+
         console.error('Wii Remote disconnected:', err);
 
         // ★追加: エラーハンドラを発火点として、必ずフロントへ切断イベントを送る
@@ -418,8 +696,16 @@ async function connectWiiRemote() {
         broadcast({ type: 'wiiDisconnected', at: Date.now(), reason: String(err) });
 
         setWiiConnected(false);
+        setWiiConnected(false);
         // ★追加: 切断されたらタイマーを止める
         if (keepAliveInterval) clearInterval(keepAliveInterval);
+
+        // ★追加: デバイスをクリア
+        currentDevice = null;
+        isPlayingAudio = false;
+
+
+        try { device?.close(); } catch { }
 
         try { device?.close(); } catch { }
         connectWiiRemote();
@@ -429,6 +715,13 @@ async function connectWiiRemote() {
     device.on('close', () => {
         // ★追加: closeも切断イベント発火点として通知
         broadcast({ type: 'wiiDisconnected', at: Date.now(), reason: 'close' });
+
+        setWiiConnected(false);
+        if (keepAliveInterval) clearInterval(keepAliveInterval);
+
+        // ★追加: デバイスをクリア
+        currentDevice = null;
+        isPlayingAudio = false;
 
         setWiiConnected(false);
         if (keepAliveInterval) clearInterval(keepAliveInterval);

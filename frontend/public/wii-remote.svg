@@ -1,0 +1,13 @@
+<svg width="50" height="50" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
+  <!-- Wiiリモコンの本体 -->
+  <rect x="8" y="5" width="34" height="40" rx="8" ry="8" fill="#FFFFFF" stroke="#000000" stroke-width="2"/>
+  
+  <!-- 上のボタン -->
+  <circle cx="25" cy="15" r="4" fill="#000000"/>
+  
+  <!-- 中央のボタン -->
+  <circle cx="25" cy="25" r="4" fill="#000000"/>
+  
+  <!-- 下のボタン -->
+  <circle cx="25" cy="35" r="4" fill="#000000"/>
+</svg>
