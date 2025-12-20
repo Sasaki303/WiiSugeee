@@ -74,10 +74,10 @@ def convert_wav_to_raw(input_file, output_file, duration_sec=None):
         audio = audio / max_val
     
     # ソフトクリッピング（アナログ的な歪み低減）
-    audio = np.tanh(audio * 0.7) / np.tanh(0.7)
+    audio = np.tanh(audio * 0.8) / np.tanh(0.8)
     
-    # 最終振幅調整（音割れ防止）
-    audio = audio * 0.55
+    # 最終振幅調整（音割れ防止と音量のバランス）
+    audio = audio * 0.70
     
     # ディザリング追加（量子化ノイズをホワイトノイズに変換）
     dither = np.random.triangular(-0.5/127, 0, 0.5/127, len(audio))
