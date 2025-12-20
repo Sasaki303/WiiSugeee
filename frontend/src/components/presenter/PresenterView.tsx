@@ -31,12 +31,10 @@ export function PresenterView() {
 	// PC側の音声再生用（HTMLAudioElement）
 	const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
 	const audioUnlockedRef = useRef(false);
-	const unlockRequestedRef = useRef(false);
 	const pendingSoundRef = useRef<"q" | "w" | "e" | null>(null);
 
 	const tryUnlockAudio = useCallback(async () => {
 		if (audioUnlockedRef.current) return;
-		if (!unlockRequestedRef.current) return;
 
 		const { q, w, e } = soundboardRef.current;
 		const audios = [q, w, e].filter(Boolean) as HTMLAudioElement[];
@@ -54,6 +52,7 @@ export function PresenterView() {
 			a.muted = prevMuted;
 			a.volume = prevVolume;
 			audioUnlockedRef.current = true;
+			console.log("[Audio] Successfully unlocked audio context");
 
 			const pending = pendingSoundRef.current;
 			pendingSoundRef.current = null;
@@ -72,20 +71,32 @@ export function PresenterView() {
 	}, []);
 
 	// PC側で音声を再生（HTMLAudio）
-	const playSoundOnPC = useCallback((key: "q" | "w" | "e") => {
+	const playSoundOnPC = useCallback(async (key: "q" | "w" | "e") => {
 		const a = soundboardRef.current[key];
-		if (!a) return;
-		if (!audioUnlockedRef.current) {
-			pendingSoundRef.current = key;
+		if (!a) {
+			console.warn(`[Audio] No audio element for key: ${key}`);
 			return;
 		}
+		
+		// オーディオがアンロックされていない場合、アンロックを試行
+		if (!audioUnlockedRef.current) {
+			console.log(`[Audio] Attempting to unlock audio context for ${key}`);
+			pendingSoundRef.current = key;
+			await tryUnlockAudio();
+			// アンロックに失敗した場合はペンディングに保存済み
+			if (!audioUnlockedRef.current) {
+				console.warn("[Audio] Audio context not unlocked yet, sound will play after user interaction");
+				return;
+			}
+		}
 
+		console.log(`[Audio] Playing sound on PC: ${key}`);
 		a.currentTime = 0;
 		void a.play().catch((err) => {
+			console.warn(`[Audio] Sound play failed for ${key}:`, err);
 			pendingSoundRef.current = key;
-			console.warn("sound play failed", key, err);
 		});
-	}, []);
+	}, [tryUnlockAudio]);
 
 	// Wiiリモコン側で音声を再生
 	const playSoundOnWii = useCallback(
@@ -142,8 +153,24 @@ export function PresenterView() {
 		w.preload = "auto";
 		e.preload = "auto";
 		soundboardRef.current = { q, w, e };
-		void tryUnlockAudio();
+		console.log("[Audio] Audio elements initialized");
+		
+		// ユーザーインタラクション時にオーディオコンテキストをアンロック
+		const unlockOnInteraction = () => {
+			if (audioUnlockedRef.current) return;
+			console.log("[Audio] User interaction detected, unlocking audio");
+			void tryUnlockAudio();
+		};
+		
+		// クリックやタッチでアンロックを試行
+		window.addEventListener("click", unlockOnInteraction);
+		window.addEventListener("touchstart", unlockOnInteraction);
+		window.addEventListener("keydown", unlockOnInteraction);
+		
 		return () => {
+			window.removeEventListener("click", unlockOnInteraction);
+			window.removeEventListener("touchstart", unlockOnInteraction);
+			window.removeEventListener("keydown", unlockOnInteraction);
 			for (const a of [q, w, e]) {
 				try {
 					a.pause();
@@ -153,7 +180,7 @@ export function PresenterView() {
 			}
 			soundboardRef.current = {};
 		};
-	}, []);
+	}, [tryUnlockAudio]);
 
     // スペースキーでデバッグパネルとIRセンサーデバッグ表示を切り替え
     useEffect(() => {
