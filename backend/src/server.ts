@@ -126,8 +126,8 @@ function generateBeep(frequency: number, durationMs: number): Buffer {
         else if (t > totalTime - 0.05) envelope = (totalTime - t) / 0.05;
 
         // Signed 8-bit PCM (-128 to 127)
-        // 振幅を少し抑える (80程度)
-        const scaled = Math.floor(value * envelope * 80);
+        // 振幅を控えめに設定して音割れを防止 (50程度)
+        const scaled = Math.floor(value * envelope * 50);
         buffer.writeInt8(Math.max(-128, Math.min(127, scaled)), i);
     }
 
