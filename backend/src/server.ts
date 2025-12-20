@@ -214,7 +214,10 @@ function playSoundOnWiiInternal(soundType: 'shot' | 'oh' | 'uxo') {
         const chunkSize = 20;
         // ★スピーカー設定（initSpeakerの0x1770=2000Hz）と一致させる
         const sampleRate = 2000;
-        const chunkMs = (chunkSize / sampleRate) * 1000;
+        // Wiiリモコンのスピーカーバッファを考慮した送信間隔（実測値に基づく調整）
+        // 理論値: (20 samples / 2000 Hz) * 1000 = 10ms
+        // 実際: バッファオーバーフロー防止のため20msに設定
+        const chunkMs = 20;
 
         const totalChunks = Math.ceil(dataToSend.length / chunkSize);
         let chunkIndex = 0;
@@ -224,7 +227,7 @@ function playSoundOnWiiInternal(soundType: 'shot' | 'oh' | 'uxo') {
         packet[0] = 0x18;
         packet[1] = 0xA0;
 
-        console.log(`Total chunks to send: ${totalChunks}, Duration: ${(totalChunks * chunkMs).toFixed(0)}ms`);
+        console.log(`Total chunks to send: ${totalChunks}, Theoretical duration: ${(totalChunks * 10).toFixed(0)}ms, Actual send time: ${(totalChunks * chunkMs).toFixed(0)}ms`);
 
         const tick = () => {
             // currentDevice が途中で null になる可能性がある
