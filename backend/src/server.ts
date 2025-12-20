@@ -213,7 +213,7 @@ function playSoundOnWiiInternal(soundType: 'shot' | 'oh' | 'uxo') {
 
         const chunkSize = 20;
         const sampleRate = 2000;
-        const chunkMs = (chunkSize / sampleRate) * 1000; // 10ms/chunk
+        const chunkMs = (chunkSize / sampleRate) * 1000; // 10ms per chunk
 
         const totalChunks = Math.ceil(dataToSend.length / chunkSize);
         let chunkIndex = 0;
@@ -285,7 +285,10 @@ function playSoundOnWiiInternal(soundType: 'shot' | 'oh' | 'uxo') {
             setTimeout(tick, chunkMs);
         };
 
-        tick();
+        // 初期バースト後、定期送信を開始
+        if (chunkIndex < totalChunks) {
+            setTimeout(tick, chunkMs);
+        }
     } catch (err) {
         console.error('Failed to play sound on Wii:', err);
         isPlayingAudio = false;

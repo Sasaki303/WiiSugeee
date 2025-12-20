@@ -49,15 +49,15 @@ def convert_wav_to_raw(input_file, output_file, duration_sec=None):
     
     # アンチエイリアシングフィルタ（カイザー窓）
     nyquist = target_rate / 2
-    cutoff = 850  # 850Hz（ナイキストの85%で品質と安全性のバランス）
+    cutoff = 900  # 900Hz（ナイキストの90%で高音域を保持）
     
     # 正規化周波数
     w = cutoff / (sample_rate / 2)
     
     # カイザー窓FIRフィルタ（リニアフェーズで歪みなし）
     if w < 1.0:
-        numtaps = 101  # フィルタ長
-        taps = signal.firwin(numtaps, cutoff, fs=sample_rate, window=('kaiser', 8.0))
+        numtaps = 81  # フィルタ長を短縮してリンギングを低減
+        taps = signal.firwin(numtaps, cutoff, fs=sample_rate, window=('kaiser', 6.0))
         audio = signal.filtfilt(taps, 1.0, audio)
     
     if sample_rate != target_rate:
