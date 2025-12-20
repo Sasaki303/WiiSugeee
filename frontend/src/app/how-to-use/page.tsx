@@ -102,37 +102,84 @@ export default function HowToUsePage() {
                             エディタの使い方
                         </h2>
                         
+                        {/* 操作方法の画像 */}
+                        <div style={{ 
+                            display: "flex", 
+                            gap: 20, 
+                            marginBottom: 30,
+                            flexWrap: "wrap",
+                            justifyContent: "center",
+                        }}>
+                            <img 
+                                src="/Frame 47.png" 
+                                alt="エディタ操作方法1" 
+                                style={{ 
+                                    maxWidth: "280px", 
+                                    width: "100%",
+                                    borderRadius: 12,
+                                    border: `2px solid ${colors.buttonBorder}`,
+                                    boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+                                }} 
+                            />
+                            <img 
+                                src="/Frame 48.png" 
+                                alt="エディタ操作方法2" 
+                                style={{ 
+                                    maxWidth: "280px", 
+                                    width: "100%",
+                                    borderRadius: 12,
+                                    border: `2px solid ${colors.buttonBorder}`,
+                                    boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+                                }} 
+                            />
+                            <img 
+                                src="/Frame 49.png" 
+                                alt="エディタ操作方法3" 
+                                style={{ 
+                                    maxWidth: "280px", 
+                                    width: "100%",
+                                    borderRadius: 12,
+                                    border: `2px solid ${colors.buttonBorder}`,
+                                    boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+                                }} 
+                            />
+                        </div>
+
                         <h3 style={{ fontSize: 22, marginBottom: 15 }}>スライドの作成</h3>
                         <p style={{ fontSize: 16, lineHeight: 1.8, marginBottom: 20 }}>
-                            エディタでは、PDFファイルや画像ファイルをインポートしてスライドを作成できます。
+                            エディタでは、PDFファイルや画像・動画ファイルをキャンバスに追加してスライドを作成できます。<br />
+                            ファイルをドラッグ＆ドロップするか、クリックしてファイルを選択してください。
                         </p>
 
-                        <h4 style={{ fontSize: 18, marginBottom: 10, marginTop: 25 }}>📄 PDFのインポート</h4>
+                        <h4 style={{ fontSize: 18, marginBottom: 10, marginTop: 25 }}>📄 PDFの追加</h4>
                         <ol style={{ fontSize: 16, lineHeight: 2, paddingLeft: 20, marginBottom: 20 }}>
-                            <li>エディタ画面の「PDFをインポート」ボタンをクリック</li>
-                            <li>PDFファイルを選択</li>
-                            <li>各ページが自動的にスライドとして追加されます</li>
+                            <li>PDFファイル（.pdf）をキャンバスにドラッグ＆ドロップ</li>
+                            <li>または、エディタ画面をクリックしてPDFファイルを選択</li>
+                            <li>PDFの各ページが自動的にスライドノードとして追加されます</li>
+                            <li>ページ間は自動的にエッジで接続されます</li>
                         </ol>
 
-                        <h4 style={{ fontSize: 18, marginBottom: 10, marginTop: 25 }}>🖼️ 画像のインポート</h4>
+                        <h4 style={{ fontSize: 18, marginBottom: 10, marginTop: 25 }}>🖼️ 画像の追加</h4>
                         <ol style={{ fontSize: 16, lineHeight: 2, paddingLeft: 20, marginBottom: 20 }}>
-                            <li>「画像を追加」ボタンをクリック</li>
-                            <li>PNG、JPG、GIF形式の画像を選択</li>
-                            <li>画像がスライドとして追加されます</li>
+                            <li>画像ファイル（.png / .jpg / .jpeg）をキャンバスにドラッグ＆ドロップ</li>
+                            <li>または、エディタ画面をクリックして画像ファイルを選択</li>
+                            <li>各画像がスライドノードとして追加されます</li>
                         </ol>
 
-                        <h4 style={{ fontSize: 18, marginBottom: 10, marginTop: 25 }}>🎬 動画のインポート</h4>
+                        <h4 style={{ fontSize: 18, marginBottom: 10, marginTop: 25 }}>🎬 動画の追加</h4>
                         <ol style={{ fontSize: 16, lineHeight: 2, paddingLeft: 20, marginBottom: 20 }}>
-                            <li>「動画を追加」ボタンをクリック</li>
-                            <li>MP4形式の動画ファイルを選択</li>
-                            <li>動画スライドとして追加されます</li>
+                            <li>動画ファイル（.mp4）をキャンバスにドラッグ＆ドロップ</li>
+                            <li>または、エディタ画面をクリックして動画ファイルを選択</li>
+                            <li>動画がスライドノードとして追加されます</li>
+                            <li>発表モードでは動画が自動再生されます（音声あり）</li>
                         </ol>
 
                         <h3 style={{ fontSize: 22, marginBottom: 15, marginTop: 30 }}>スライドの整理</h3>
                         <ul style={{ fontSize: 16, lineHeight: 2, paddingLeft: 20 }}>
-                            <li>ドラッグ＆ドロップでスライドの順番を変更</li>
-                            <li>右クリックメニューで複製・削除</li>
-                            <li>サムネイルをクリックでプレビュー</li>
+                            <li>ノードをドラッグ＆ドロップで移動</li>
+                            <li>ノードとノードをつなげてスライドの順序を定義</li>
+                            <li>複数のファイルを同時にドロップ可能</li>
+                            <li>エディタ上部の「発表モード」ボタンでプレゼンテーション開始</li>
                         </ul>
                     </div>
                 );
@@ -187,19 +234,21 @@ export default function HowToUsePage() {
                             発表中にスライド上に直接書き込みができます。
                         </p>
                         <ul style={{ fontSize: 16, lineHeight: 2, paddingLeft: 20, marginBottom: 20 }}>
-                            <li>Pキーでペイントモードを切り替え</li>
-                            <li>マウスまたはWiiリモコンのポインターで描画</li>
-                            <li>色やペンの太さは設定で変更可能</li>
+                            <li>マウスクリック（またはWiiリモコンのAボタン）を押しながらドラッグで描画</li>
+                            <li>Wiiリモコン使用時はIRポインターの位置に描画されます</li>
+                            <li>Eキー（またはWiiリモコンの割り当て）で消しゴムモード切り替え</li>
+                            <li>Iキー（またはWiiリモコンの割り当て）でIRカーソル表示/非表示切り替え</li>
                         </ul>
 
                         <h3 style={{ fontSize: 22, marginBottom: 15, marginTop: 30 }}>🔊 効果音</h3>
                         <p style={{ fontSize: 16, lineHeight: 1.8, marginBottom: 15 }}>
-                            キーボードのQ/W/Eキーで効果音を再生できます。
+                            キーボードのQ/W/Eキーで効果音を再生できます。<br />
+                            Wiiリモコン接続時は、PC側とWiiリモコンのスピーカー両方で再生されます。
                         </p>
                         <ul style={{ fontSize: 16, lineHeight: 2, paddingLeft: 20 }}>
-                            <li>Q - 効果音1</li>
-                            <li>W - 効果音2</li>
-                            <li>E - 効果音3</li>
+                            <li>Q - ショット音</li>
+                            <li>W - UXO音</li>
+                            <li>E - OH音</li>
                         </ul>
                     </div>
                 );
@@ -220,22 +269,24 @@ export default function HowToUsePage() {
 
                         <h3 style={{ fontSize: 22, marginBottom: 15, marginTop: 30 }}>接続手順</h3>
                         <ol style={{ fontSize: 16, lineHeight: 2.2, paddingLeft: 20, marginBottom: 20 }}>
+                            <li>バックエンドサーバーを起動（`cd backend && npm start`）</li>
                             <li>PCのBluetooth設定を開く</li>
-                            <li>Wiiリモコンの①②ボタンを同時に押してペアリングモードにする</li>
-                            <li>PCのBluetooth設定で「Nintendo RVL-CNT-01」を選択</li>
-                            <li>ペアリングを完了</li>
-                            <li>バックエンドサーバーを起動（npm run start）</li>
-                            <li>WiiCanのホーム画面下部にリモコンアイコンが表示されれば接続完了！</li>
+                            <li>Wiiリモコンの①②ボタンを同時に長押ししてペアリングモードにする</li>
+                            <li>PCのBluetooth設定で「Nintendo RVL-CNT-01」を選択してペアリング</li>
+                            <li>バックエンドサーバーが自動的にWiiリモコンを検出</li>
+                            <li>WiiCanのホーム画面下部にWiiリモコンのアイコンが表示されれば接続完了！</li>
                         </ol>
 
                         <h3 style={{ fontSize: 22, marginBottom: 15, marginTop: 30 }}>ボタン割り当て</h3>
                         <p style={{ fontSize: 16, lineHeight: 1.8, marginBottom: 15 }}>
-                            設定画面でWiiリモコンの各ボタンに機能を割り当てられます。
+                            エディタ画面でWiiリモコンの各ボタンに機能を割り当てられます。
                         </p>
                         <ul style={{ fontSize: 16, lineHeight: 2, paddingLeft: 20, marginBottom: 20 }}>
-                            <li>ホーム画面 → 設定を開く</li>
-                            <li>「Wiiリモコン ボタン割り当て」セクション</li>
-                            <li>機能ブロックをドラッグ＆ドロップで割り当て</li>
+                            <li>エディタ画面を開く</li>
+                            <li>画面左上の「Wiiリモコン設定」アイコンをクリック</li>
+                            <li>Wiiリモコンの画像が表示されます</li>
+                            <li>各ボタンをクリックして割り当てる機能を選択</li>
+                            <li>設定は自動的に保存されます</li>
                         </ul>
 
                         <h3 style={{ fontSize: 22, marginBottom: 15, marginTop: 30 }}>トラブルシューティング</h3>
