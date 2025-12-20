@@ -34,6 +34,17 @@ export function WiiReconnectPopup({ isPlaying, wiiConnected, startedWithWii }: P
         prevConnectedRef.current = wiiConnected;
     }, [wiiConnected, isPlaying, startedWithWii]);
 
+    // 【デバッグ用】Rキーで再接続ポップアップを表示/非表示
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key.toLowerCase() === 'r') {
+                setOpen((prev) => !prev);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
     if (!open) return null;
 
     return (
@@ -48,19 +59,19 @@ export function WiiReconnectPopup({ isPlaying, wiiConnected, startedWithWii }: P
                 zIndex: 30000,
                 width: "min(400px, 90vw)",
                 borderRadius: 14,
-                background: "rgba(0, 200, 100, 0.95)",
-                border: "1px solid rgba(255,255,255,0.3)",
-                boxShadow: "0 10px 40px rgba(0,200,100,0.4)",
+                background: "#FFFFFF",
+                border: "3px solid #87CEEB",
+                boxShadow: "0 10px 40px rgba(135, 206, 235, 0.4)",
                 padding: 20,
-                color: "white",
+                color: "#87CEEB",
                 textAlign: "center",
                 animation: "slideInRight 0.3s ease-out",
             }}
         >
-            <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>
-                ✓ Wiiリモコンが接続されました！
+            <div style={{ fontSize: 24, fontWeight: 400, marginBottom: 8, fontFamily: "Doto, sans-serif" }}>
+                Wii-Remote Conected!
             </div>
-            <div style={{ fontSize: 14, opacity: 0.95, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 14, opacity: 0.8, lineHeight: 1.5, color: "#000000" }}>
                 操作を再開できます
             </div>
 

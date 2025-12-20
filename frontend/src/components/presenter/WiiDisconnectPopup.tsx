@@ -42,6 +42,17 @@ export function WiiDisconnectPopup({
         }
     }, [wiiConnected, open]);
 
+    // 【デバッグ用】Dキーで接続切れポップアップを表示/非表示
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key.toLowerCase() === 'd') {
+                setOpen((prev) => !prev);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
     if (!open) return null;
 
     return (
@@ -65,18 +76,18 @@ export function WiiDisconnectPopup({
                 style={{
                     width: "min(720px, 92vw)",
                     borderRadius: 14,
-                    background: "rgba(15,15,15,0.95)",
-                    border: "1px solid rgba(255,255,255,0.15)",
-                    boxShadow: "0 20px 80px rgba(0,0,0,0.6)",
+                    background: "#FFFFFF",
+                    border: "3px solid #FF0000",
+                    boxShadow: "0 20px 80px rgba(255, 0, 0, 0.3)",
                     padding: 24,
                     textAlign: "center",
                 }}
                 onClick={(e) => e.stopPropagation()}
             >
-                <div style={{ fontSize: 30, fontWeight: 800, marginBottom: 10 }}>
-                    Wiiリモコンの接続が切れました
+                <div style={{ fontSize: 30, fontWeight: 400, marginBottom: 10, color: "#FF0000", fontFamily: "Doto, sans-serif" }}>
+                    Wii-Remote Disconected…
                 </div>
-                <div style={{ fontSize: 16, opacity: 0.9, lineHeight: 1.6 }}>
+                <div style={{ fontSize: 16, opacity: 0.9, lineHeight: 1.6, color: "#000000" }}>
                     接続（Bluetooth/電池）を確認してください。<br />
                     キーボード操作（←/→）は引き続き利用できます。
                 </div>
