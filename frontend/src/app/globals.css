@@ -16,14 +16,6 @@
   font-display: swap;
 }
 
-@font-face {
-  font-family: 'Doto';
-  src: url('/fonts/Doto.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -95,11 +87,10 @@ label[for]:hover {
 }
 
 /* プレゼン画面でお絵描き中はペンカーソル */
-/* ペン先の座標を測定して設定してください */
-/* 例: ペン先が画像の(6, 28)にある場合 → 6 28 */
+/* ペン先が画像の左上から (6, 28) にある場合の例 */
 .presenter-painting,
 .presenter-painting * {
-  cursor: url("/pen.png") 6 28, crosshair !important;
+  cursor: url("/pen.png") 0 0, crosshair !important;
 }
 
 
