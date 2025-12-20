@@ -871,7 +871,7 @@ export function PresenterView() {
             }}
         >
             {/*ここから*/}
-            <WiiDisconnectPopup
+            {/* <WiiDisconnectPopup
                 isPlaying={isPlaying}
                 startedWithWii={startedWithWii}
                 wiiConnected={wiiConnected}
@@ -883,7 +883,7 @@ export function PresenterView() {
                 isPlaying={isPlaying}
                 wiiConnected={wiiConnected}
                 startedWithWii={startedWithWii}
-            />
+            /> */}
             {/*ここ残す*/}
             {/*ここから*/}
             <WiiDisconnectPopup2
