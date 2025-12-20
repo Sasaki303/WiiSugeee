@@ -152,7 +152,7 @@ export function useWiiController() {
 		ws.onclose = handleDisconnect;
 
 		return () => {
-			try { ws.close(); } catch { /* ignore */ }
+			try { ws.close(); } catch {}
 			wsRef.current = null;
 		};
 	}, []);

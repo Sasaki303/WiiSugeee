@@ -41,9 +41,7 @@ async function showOpenFilePickerCompat(): Promise<File | null> {
 			});
 			if (!handle) return null;
 			return await handle.getFile();
-		} catch {
-			// fallthrough
-		}
+		} catch {}
 	}
 
 	return await new Promise<File | null>((resolve) => {

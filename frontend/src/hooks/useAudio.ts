@@ -44,9 +44,7 @@ export function useAudio(playWiiSound: (soundType: "shot" | "oh" | "uxo") => voi
 				soundboardRef.current[pending]!.currentTime = 0;
 				void soundboardRef.current[pending]!.play().catch(() => {});
 			}
-		} catch {
-			// Ignore unlock failure
-		}
+		} catch {}
 	}, []);
 
 	const playSoundOnPC = useCallback(
@@ -112,9 +110,7 @@ export function useAudio(playWiiSound: (soundType: "shot" | "oh" | "uxo") => voi
 			for (const a of [q, w, e]) {
 				try {
 					a.pause();
-				} catch {
-					// Ignore
-				}
+				} catch {}
 			}
 			soundboardRef.current = { q: undefined, w: undefined, e: undefined };
 		};

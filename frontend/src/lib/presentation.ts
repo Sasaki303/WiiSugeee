@@ -4,7 +4,7 @@ export type ProjectAsset = {
 	id: string;
 	kind: "pdf" | "video" | "image";
 	fileName: string;
-	storedFileName: string; // assets/ 配下のファイル名
+	storedFileName: string;
 };
 
 export type AssetRef =
@@ -76,9 +76,7 @@ export function tryParseFlowJson(text: string): SerializedFlow | null {
 export function saveToLocalStorage(flow: SerializedFlow): void {
 	try {
 		localStorage.setItem(STORAGE_KEY, serializeFlow(flow));
-	} catch {
-		// ignore
-	}
+	} catch {}
 }
 
 export function loadFromLocalStorage(): SerializedFlow | null {
@@ -102,16 +100,12 @@ export function getLastSavedHash(): string | null {
 export function setLastSavedHash(hash: string): void {
 	try {
 		localStorage.setItem(LAST_SAVED_HASH_KEY, hash);
-	} catch {
-		// ignore
-	}
+	} catch {}
 }
 
 export function clearEditorStorage(): void {
 	try {
 		localStorage.removeItem(STORAGE_KEY);
 		localStorage.removeItem(LAST_SAVED_HASH_KEY);
-	} catch {
-		// ignore
-	}
+	} catch {}
 }

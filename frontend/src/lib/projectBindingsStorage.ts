@@ -17,7 +17,5 @@ export function loadProjectBindings(projectId: string): ButtonBindings | undefin
 export function saveProjectBindings(projectId: string, bindings: ButtonBindings) {
     try {
         localStorage.setItem(key(projectId), JSON.stringify(bindings));
-    } catch {
-        // ignore
-    }
+    } catch {}
 }

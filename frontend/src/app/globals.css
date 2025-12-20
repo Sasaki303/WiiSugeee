@@ -52,8 +52,7 @@ a {
   color: inherit;
   text-decoration: none;
 }
-
-/* カスタムカーソル（0.75倍サイズで統一） */
+zw
 html,
 body,
 #__next,
@@ -86,8 +85,6 @@ label[for]:hover {
   cursor: url("/PrecisionSelect.png") 24 24, pointer !important;
 }
 
-/* プレゼン画面でお絵描き中はペンカーソル */
-/* ペン先が画像の左上から (6, 28) にある場合の例 */
 .presenter-painting,
 .presenter-painting * {
   cursor: url("/pen.png") 0 0, crosshair !important;

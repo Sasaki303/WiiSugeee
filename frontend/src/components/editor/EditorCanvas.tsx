@@ -34,7 +34,6 @@ import { createAssetMeta } from "@/lib/projectFolder";
 import { setCurrentFlow } from "@/lib/currentProjectStore";
 
 function hashString(input: string): string {
-	// djb2
 	let hash = 5381;
 	for (let i = 0; i < input.length; i++) {
 		hash = (hash * 33) ^ input.charCodeAt(i);
@@ -43,7 +42,6 @@ function hashString(input: string): string {
 }
 
 function computeFlowHash(flow: SerializedFlow): string {
-	// viewport は保存対象外なので hash から除外
 	const minimal = {
 		version: flow.version,
 		assets: flow.assets ?? [],

@@ -9,7 +9,6 @@ export default function HowToUsePage() {
     const [isDark, setIsDark] = useState(true);
     const [activeTab, setActiveTab] = useState<TabKey>("overview");
 
-    // ダークモード設定を検出
     useEffect(() => {
         const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
         setIsDark(mediaQuery.matches);
@@ -282,7 +281,6 @@ export default function HowToUsePage() {
             backgroundColor: colors.bg,
             color: colors.text,
         }}>
-            {/* ========== ヘッダーエリア ========== */}
             <header style={{
                 display: "flex",
                 flexDirection: "column",
@@ -291,7 +289,6 @@ export default function HowToUsePage() {
                 backgroundColor: colors.headerFooterBg,
                 gap: 20,
             }}>
-                {/* タイトルとホームへ戻るボタン */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <h1 style={{
                         fontSize: "36px",
@@ -326,7 +323,6 @@ export default function HowToUsePage() {
                     </Link>
                 </div>
 
-                {/* タブボタン */}
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                     {tabs.map((tab) => (
                         <button
@@ -352,7 +348,6 @@ export default function HowToUsePage() {
                 </div>
             </header>
 
-            {/* ========== コンテンツエリア ========== */}
             <main style={{
                 flex: 1,
                 padding: "40px",
