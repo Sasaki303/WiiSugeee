@@ -1,5 +1,21 @@
 import HID from 'node-hid';
 import { WebSocketServer, WebSocket } from 'ws';
+import koffi from 'koffi';
+
+// Windows API for mouse control
+const user32 = koffi.load('user32.dll');
+const SetCursorPos = user32.func('SetCursorPos', 'bool', ['int', 'int']);
+const GetSystemMetrics = user32.func('GetSystemMetrics', 'int', ['int']);
+
+// Screen dimensions
+const SM_CXSCREEN = 0;
+const SM_CYSCREEN = 1;
+let screenWidth = GetSystemMetrics(SM_CXSCREEN);
+let screenHeight = GetSystemMetrics(SM_CYSCREEN);
+console.log(`Screen size: ${screenWidth}x${screenHeight}`);
+
+// IR→カーソル制御の有効/無効フラグ
+let irCursorEnabled = false;
 
 // WiiリモコンのID定義
 const VENDOR_ID = 0x057e;
@@ -34,10 +50,22 @@ wss.on('connection', (ws) => {
     console.log('Client connected');
     // 接続直後に現在の状態を通知
     try {
-        ws.send(JSON.stringify({ type: 'status', connected: isWiiConnected }));
+        ws.send(JSON.stringify({ type: 'status', connected: isWiiConnected, irCursorEnabled }));
     } catch { }
     ws.on('close', () => {
         clients = clients.filter(c => c !== ws);
+    });
+    
+    // クライアントからのメッセージ受信
+    ws.on('message', (data) => {
+        try {
+            const msg = JSON.parse(data.toString());
+            if (msg.type === 'setIrCursor') {
+                irCursorEnabled = !!msg.enabled;
+                console.log(`IR Cursor control: ${irCursorEnabled ? 'ENABLED' : 'DISABLED'}`);
+                broadcast({ type: 'irCursorStatus', enabled: irCursorEnabled });
+            }
+        } catch { }
     });
 });
 
@@ -173,6 +201,13 @@ async function connectWiiRemote() {
         // === カーソル座標計算 ===
         const cursorRaw = calcCursorFromIR(irDots);
         const cursor = cursorRaw ? normalizeCursor(cursorRaw) : null;
+
+        // === PCカーソル移動（有効時のみ） ===
+        if (irCursorEnabled && cursor) {
+            const screenX = Math.round(cursor.x * screenWidth);
+            const screenY = Math.round(cursor.y * screenHeight);
+            SetCursorPos(screenX, screenY);
+        }
 
         // === フロントへ送るデータ ===
         const payload = {
