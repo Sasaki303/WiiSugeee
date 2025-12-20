@@ -12,6 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "koffi": "^2.14.1",
     "node-hid": "^3.1.0",
     "ws": "^8.18.0"
   },

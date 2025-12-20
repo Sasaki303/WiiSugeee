@@ -13,6 +13,7 @@ import { WiiDisconnectPopup } from "@/components/presenter/WiiDisconnectPopup";
 import { WiiReconnectPopup } from "@/components/presenter/WiiReconnectPopup";
 import { SlideDisplay } from "@/components/presenter/SlideDisplay";
 import { DrawingCanvas } from "@/components/presenter/DrawingCanvas";
+import { IrPointerOverlay } from "@/components/presenter/IrPointerOverlay";
 
 export function PresenterView() {
     const router = useRouter();
@@ -21,19 +22,19 @@ export function PresenterView() {
     const isMouseDrawingRef = useRef(false);
     const [isPainting, setIsPainting] = useState(false);
     const wasWiiADownRef = useRef(false);
+    const lastEraserToggleTimeRef = useRef<number>(0); // 消しゴムトグルの多重入力防止
+    const lastIrSensToggleTimeRef = useRef<number>(0); // IRセンサートグルの多重入力防止
 
     // Wiiリモコンの状態を取得
-	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt, playWiiSound } = useWiiController();
+	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt, irCursorEnabled, setIrCursorEnabled , playWiiSound } = useWiiController();
 
 	// PC側の音声再生用（HTMLAudioElement）
 	const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
 	const audioUnlockedRef = useRef(false);
-	const unlockRequestedRef = useRef(false);
 	const pendingSoundRef = useRef<"q" | "w" | "e" | null>(null);
 
 	const tryUnlockAudio = useCallback(async () => {
 		if (audioUnlockedRef.current) return;
-		if (!unlockRequestedRef.current) return;
 
 		const { q, w, e } = soundboardRef.current;
 		const audios = [q, w, e].filter(Boolean) as HTMLAudioElement[];
@@ -51,6 +52,7 @@ export function PresenterView() {
 			a.muted = prevMuted;
 			a.volume = prevVolume;
 			audioUnlockedRef.current = true;
+			console.log("[Audio] Successfully unlocked audio context");
 
 			const pending = pendingSoundRef.current;
 			pendingSoundRef.current = null;
@@ -69,20 +71,32 @@ export function PresenterView() {
 	}, []);
 
 	// PC側で音声を再生（HTMLAudio）
-	const playSoundOnPC = useCallback((key: "q" | "w" | "e") => {
+	const playSoundOnPC = useCallback(async (key: "q" | "w" | "e") => {
 		const a = soundboardRef.current[key];
-		if (!a) return;
-		if (!audioUnlockedRef.current) {
-			pendingSoundRef.current = key;
+		if (!a) {
+			console.warn(`[Audio] No audio element for key: ${key}`);
 			return;
 		}
+		
+		// オーディオがアンロックされていない場合、アンロックを試行
+		if (!audioUnlockedRef.current) {
+			console.log(`[Audio] Attempting to unlock audio context for ${key}`);
+			pendingSoundRef.current = key;
+			await tryUnlockAudio();
+			// アンロックに失敗した場合はペンディングに保存済み
+			if (!audioUnlockedRef.current) {
+				console.warn("[Audio] Audio context not unlocked yet, sound will play after user interaction");
+				return;
+			}
+		}
 
+		console.log(`[Audio] Playing sound on PC: ${key}`);
 		a.currentTime = 0;
 		void a.play().catch((err) => {
+			console.warn(`[Audio] Sound play failed for ${key}:`, err);
 			pendingSoundRef.current = key;
-			console.warn("sound play failed", key, err);
 		});
-	}, []);
+	}, [tryUnlockAudio]);
 
 	// Wiiリモコン側で音声を再生
 	const playSoundOnWii = useCallback(
@@ -123,6 +137,7 @@ export function PresenterView() {
     const [startedWithWii, setStartedWithWii] = useState(false);
     const [playingSince, setPlayingSince] = useState<number>(0);
     const [showDebugPanel, setShowDebugPanel] = useState(true);
+    const [showIrDebug, setShowIrDebug] = useState(false); // IRセンサーデバッグ表示
 
     const pdfDocCacheRef = useRef<Map<string, Promise<any>>>(new Map());
 
@@ -138,8 +153,24 @@ export function PresenterView() {
 		w.preload = "auto";
 		e.preload = "auto";
 		soundboardRef.current = { q, w, e };
-		void tryUnlockAudio();
+		console.log("[Audio] Audio elements initialized");
+		
+		// ユーザーインタラクション時にオーディオコンテキストをアンロック
+		const unlockOnInteraction = () => {
+			if (audioUnlockedRef.current) return;
+			console.log("[Audio] User interaction detected, unlocking audio");
+			void tryUnlockAudio();
+		};
+		
+		// クリックやタッチでアンロックを試行
+		window.addEventListener("click", unlockOnInteraction);
+		window.addEventListener("touchstart", unlockOnInteraction);
+		window.addEventListener("keydown", unlockOnInteraction);
+		
 		return () => {
+			window.removeEventListener("click", unlockOnInteraction);
+			window.removeEventListener("touchstart", unlockOnInteraction);
+			window.removeEventListener("keydown", unlockOnInteraction);
 			for (const a of [q, w, e]) {
 				try {
 					a.pause();
@@ -151,30 +182,13 @@ export function PresenterView() {
 		};
 	}, [tryUnlockAudio]);
 
-	// 初回ユーザー操作で音声をアンロック
-	useEffect(() => {
-		const onFirstUserGesture = () => {
-			unlockRequestedRef.current = true;
-			void tryUnlockAudio();
-		};
-
-		window.addEventListener("pointerdown", onFirstUserGesture, { once: true });
-		window.addEventListener("keydown", onFirstUserGesture, { once: true });
-		window.addEventListener("touchstart", onFirstUserGesture, { once: true });
-
-		return () => {
-			window.removeEventListener("pointerdown", onFirstUserGesture);
-			window.removeEventListener("keydown", onFirstUserGesture);
-			window.removeEventListener("touchstart", onFirstUserGesture);
-		};
-	}, [tryUnlockAudio]);
-
-    // スペースキーでデバッグパネルの表示/非表示を切り替え
+    // スペースキーでデバッグパネルとIRセンサーデバッグ表示を切り替え
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.code === "Space" && e.target === document.body) {
                 e.preventDefault();
                 setShowDebugPanel(prev => !prev);
+                setShowIrDebug(prev => !prev);
             }
         };
         
@@ -434,20 +448,32 @@ export function PresenterView() {
 			if (e.key === "ArrowLeft") prevSlide();
 			// ESCキーで元の画面へ戻る（エディタ経由ならエディタへ）
 			if (e.key === "Escape") goBack();
+			
+			// ★追加: CキーでIRカーソル切替
+			if ((e.key === "c" || e.key === "C") && !e.repeat) {
+				setIrCursorEnabled(!irCursorEnabled);
+				return;
+			}
         };
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isPlaying, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches, playSound]);
+    }, [isPlaying, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches, playSound, irCursorEnabled, setIrCursorEnabled]);
 
     const effectiveProjectBindings = useMemo(() => {
-        const merged = mergeBindings(flow?.projectBindings);
-        console.log("PresenterView: effectiveProjectBindings updated", { 
-            flowBindings: flow?.projectBindings, 
-            merged 
+        // プロジェクト全体の割当 + スライド別の割当（あれば上書き）を合成
+        const combined = {
+            ...(flow?.projectBindings ?? {}),
+            ...(currentNode?.data.bindings ?? {}),
+        };
+        const merged = mergeBindings(combined);
+        console.log("PresenterView: effectiveProjectBindings updated", {
+            flowBindings: flow?.projectBindings,
+            slideBindings: currentNode?.data.bindings,
+            merged,
         });
         return merged;
-    }, [flow]);
+    }, [flow, currentNode]);
 
     // --- プロジェクト全体バインドを適用してアクション実行 ---
     const runAction = useCallback(
@@ -456,6 +482,9 @@ export function PresenterView() {
             if (eraserMode && act.type !== "eraser") {
                 return;
             }
+            
+            // ★デバッグ: アクション実行をログ出力
+            console.log(`[WiiAction] Button: ${btnName || "unknown"}, Action:`, act);
             
             switch (act.type) {
 				case "next":
@@ -483,7 +512,14 @@ export function PresenterView() {
 					// shouldPaintで別途処理するので、ここでは何もしない
 					break;
 				case "eraser":
-					// トグル式に切り替え
+					// トグル式に切り替え（500msクールタイムで多重入力防止）
+					const nowEraser = Date.now();
+					if (nowEraser - lastEraserToggleTimeRef.current < 500) {
+						console.log("[Eraser] Ignoring rapid toggle");
+						return;
+					}
+					lastEraserToggleTimeRef.current = nowEraser;
+					
 					if (eraserMode) {
 						// 解除
 						setEraserMode(false);
@@ -509,25 +545,37 @@ export function PresenterView() {
 					isMouseDrawingRef.current = false;
 					wasWiiADownRef.current = false;
 					return;
+				case "irSens":
+					// IRセンサーカーソルの切替（500msクールタイムで多重入力防止）
+					const nowIrSens = Date.now();
+					if (nowIrSens - lastIrSensToggleTimeRef.current < 500) {
+						console.log("[IRSens] Ignoring rapid toggle");
+						return;
+					}
+					lastIrSensToggleTimeRef.current = nowIrSens;
+					
+					setIrCursorEnabled(!irCursorEnabled);
+					return;
 				case "none":
 				default:
 					return;
             }
         },
-        [nextSlide, prevSlide, branchByNumberKey, hasMultipleBranches, playSound, eraserMode],
+        [nextSlide, prevSlide, branchByNumberKey, hasMultipleBranches, playSound, eraserMode, irCursorEnabled, setIrCursorEnabled],
     );
 
     // ★修正: Wiiリモコンのボタン処理（isPlayingがtrueの時のみ動作）
-    const prevPressedRef = useRef<Record<string, boolean>>({});
+    // pressed は「このフレームで押された瞬間」のボタンのみ含む（useWiiController側で処理済み）
     useEffect(() => {
         if (!isPlaying) return;
 
-        // そのフレームで「押された瞬間」のボタンだけ処理（押しっぱなしで連打しない）
-        const prevPressed = prevPressedRef.current;
+        // pressedに含まれるボタンを全て処理（既に「押された瞬間」のみ抽出済み）
         for (const btn of Object.keys(pressed)) {
             const isDown = (pressed as Record<string, boolean>)[btn];
-            const wasDown = !!prevPressed[btn];
-            if (!isDown || wasDown) continue;
+            if (!isDown) continue;
+            
+            // ★デバッグ: ボタン押下検出をログ出力
+            console.log(`[WiiPress] Button pressed: ${btn}`);
 
             const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn] ?? { type: "none" };
             
@@ -539,7 +587,6 @@ export function PresenterView() {
                 runAction(act, btn);
             }
         }
-        prevPressedRef.current = { ...(pressed as Record<string, boolean>) };
     }, [pressed, isPlaying, effectiveProjectBindings, runAction]);
 
     // ★追加: リアクション検出（バインドベース）
@@ -570,26 +617,52 @@ export function PresenterView() {
     const lastPaintInputTimeRef = useRef<number>(0);
     const [shouldPaint, setShouldPaint] = useState(false);
 
+    // ★追加: IR Cursor をOFFにした瞬間に「Wii PAINT描画」を完全停止（残留 shouldPaint を潰す）
+    useEffect(() => {
+        if (irCursorEnabled) return;
+
+        // Wiiペイント系の状態を強制リセット
+        setShouldPaint(false);
+        setIsPainting(false);
+        lastPaintInputTimeRef.current = 0;
+
+        // もしWii描画の線が継続中なら区切る
+        wasWiiADownRef.current = false;
+        setDrawingPoints((prev) =>
+            prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev
+        );
+    }, [irCursorEnabled]);
+
     // wiiState.buttonsをチェックして、現在PAINTボタンが押されているか継続的に監視
     useEffect(() => {
-        if (!isPlaying || !wiiState || eraserMode) return;
+        // ★重要: IR Cursor がOFFなら Wiiペイントは絶対に動かさない
+        if (!isPlaying || !wiiState || eraserMode || !irCursorEnabled) {
+            if (shouldPaint) {
+                setShouldPaint(false);
+                setIsPainting(false);
+            }
+            return;
+        }
 
         // 現在押されているボタンの中にPAINTがあるかチェック
         let isPaintButtonPressed = false;
         for (const btn of Object.keys(wiiState.buttons)) {
             const isDown = (wiiState.buttons as Record<string, boolean>)[btn];
             if (!isDown) continue;
+
             const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn];
             if (act?.type === "paint") {
                 isPaintButtonPressed = true;
+                break;
             }
         }
 
         if (isPaintButtonPressed) {
             lastPaintInputTimeRef.current = Date.now();
-            setShouldPaint(true);
+            if (!shouldPaint) setShouldPaint(true);
+            if (!isPainting) setIsPainting(true); // ★IR描画中もペンカーソル表示
         }
-    }, [wiiState, effectiveProjectBindings, isPlaying, eraserMode]);
+    }, [wiiState, effectiveProjectBindings, isPlaying, eraserMode, irCursorEnabled, shouldPaint, isPainting]);
 
     // 200msタイマーで描画状態をチェック
     useEffect(() => {
@@ -604,6 +677,7 @@ export function PresenterView() {
             
             if (paintElapsed > 100 && shouldPaint) {
                 setShouldPaint(false);
+                setIsPainting(false); // ★追加: Wiiボタン描画終了時もペンカーソル解除
                 // 描画を終了
                 if (isMouseDrawingRef.current) {
                     isMouseDrawingRef.current = false;
@@ -617,13 +691,22 @@ export function PresenterView() {
 
     // --- 描画/消しゴムロジック (IRセンサー & PAINTボタン) ---
     useEffect(() => {
-        if (!wiiState || wiiState.ir.length === 0) return;
+        // IRカーソルOFFの場合はIR描画を無効化
+        if (!irCursorEnabled) return;
+        
+        if (!wiiState || !wiiState.cursor) return;
 
-        const dot = wiiState.ir[0];
-        // IRカメラの座標(0-1023)を画面座標に変換
-        const x = (1 - dot.x / 1024) * window.innerWidth;
-        const y = (dot.y / 768) * window.innerHeight;
-        const pos = { x, y };
+        // ★IRカーソルON時：バックエンドから受信した正規化済みcursor座標のみを使用
+        // ★重要：CSSでcursor: url("/pen.png") 0 0を使用しているため、
+        // SetCursorPosはペン画像の左上（0,0）を動かす。
+        // しかし描画はペン先の位置（例: 6, 28）で行う必要があるため、オフセットを加算。
+        const PEN_TIP_OFFSET_X = 0;  // pen.pngのペン先X座標（実際の画像に合わせて調整）
+        const PEN_TIP_OFFSET_Y = 0; // pen.pngのペン先Y座標（実際の画像に合わせて調整）
+        
+        const pos = {
+            x: wiiState.cursor.x * window.innerWidth + PEN_TIP_OFFSET_X,
+            y: wiiState.cursor.y * window.innerHeight + PEN_TIP_OFFSET_Y,
+        };
 
         // 消しゴムモード中: IRでカーソルを移動
         if (eraserMode) {
@@ -673,7 +756,7 @@ export function PresenterView() {
                 setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
             }
         }
-    }, [wiiState, shouldPaint, eraserMode]);
+    }, [wiiState, shouldPaint, irCursorEnabled]);
 
 
     return (
@@ -713,58 +796,50 @@ export function PresenterView() {
             onMouseMove={(e) => {
                 if (!isPlaying) return;
                 
-                // 消しゴムモード時：常にカーソル位置を更新
-                if (eraserMode) {
-                    setCursorPos({ x: e.clientX, y: e.clientY });
-                    
-                    // 左クリック中またはA+B同時押し中に消去
-                    const isAPressed = wiiState?.buttons.A || false;
-                    const isBPressed = wiiState?.buttons.B || false;
-                    const shouldErase = isMouseDrawingRef.current || (isAPressed && isBPressed);
-                    
-                    if (shouldErase) {
-                        e.preventDefault();
-                        setDrawingPoints((prev) => {
-                            const last = prev[prev.length - 1];
-                            if (last && last.x && Math.abs(last.x - e.clientX) + Math.abs(last.y - e.clientY) < 2) return prev;
-                            return [...prev, { x: e.clientX, y: e.clientY, mode: "erase" }];
-                        });
-                        
-                        // A+Bでの描画フラグを立てる
-                        if (isAPressed && isBPressed && !wasWiiADownRef.current) {
-                            wasWiiADownRef.current = true;
-                            setDrawingPoints((prev) => {
-                                const next = prev.slice();
-                                if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
-                                return next;
-                            });
-                        }
-                    }
-                    return;
-                }
-                
-                // PAINTボタンが押されている、またはマウスドラッグ中
-                if (!shouldPaint && !isMouseDrawingRef.current) return;
-                
-                e.preventDefault();
-                
-                // PAINTボタンで開始（マウスダウンしていない場合）
-                if (shouldPaint && !isMouseDrawingRef.current) {
-                    isMouseDrawingRef.current = true;
+                // 消しゴムモード時：マウスでの消去（IRセンサーがない場合のフォールバック）
+                if (eraserMode && isMouseDrawingRef.current) {
+                    e.preventDefault();
                     setDrawingPoints((prev) => {
-                        const next = prev.slice();
-                        if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
-                        next.push({ x: e.clientX, y: e.clientY, mode: "draw" });
-                        return next;
+                        const last = prev[prev.length - 1];
+                        if (last && last.x && Math.abs(last.x - e.clientX) + Math.abs(last.y - e.clientY) < 2) return prev;
+                        return [...prev, { x: e.clientX, y: e.clientY, mode: "erase" }];
                     });
                     return;
                 }
                 
-                setDrawingPoints((prev) => {
-                    const last = prev[prev.length - 1];
-                    if (last && last.x && Math.abs(last.x - e.clientX) + Math.abs(last.y - e.clientY) < 2) return prev;
-                    return [...prev, { x: e.clientX, y: e.clientY, mode: "draw" }];
-                });
+                // --- 通常モード：描画（マウス or Wii PAINT） ---
+
+                // 1) マウスドラッグ中は常にマウス描画を優先
+                if (isMouseDrawingRef.current) {
+                    e.preventDefault();
+                    setDrawingPoints((prev) => {
+                        const last = prev[prev.length - 1];
+                        if (last && last.x && Math.abs(last.x - e.clientX) + Math.abs(last.y - e.clientY) < 2) return prev;
+                        return [...prev, { x: e.clientX, y: e.clientY, mode: "draw" }];
+                    });
+                    return;
+                }
+
+                // 2) WiiのPAINT（shouldPaint=true）の場合
+                if (shouldPaint) {
+                    // ★重要：IR Cursor ON のときは「IR側useEffect」が点を追加する。
+                    // ここでマウス座標(e.clientX/Y)を混ぜると、別座標が混ざって線が伸びるので何もしない。
+                    if (irCursorEnabled) return;
+
+                    // ★IR Cursor OFF のときだけ「マウス座標で1点だけ描く」挙動を許可（仕様通りの挙動）
+                    e.preventDefault();
+                    setDrawingPoints((prev) => {
+                        const next = prev.slice();
+                        if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
+                        next.push({ x: e.clientX, y: e.clientY, mode: "draw" });
+                        next.push(null); // ┅1本だけで必ず区切る
+                        return next;
+                    });
+                    return;
+                }
+
+                // 3) 何もしてないなら何もしない
+                return;
             }}
             onMouseUp={() => {
                 if (!isMouseDrawingRef.current) return;
@@ -811,6 +886,14 @@ export function PresenterView() {
             {/* リアクション */}
             <ReactionOverlay emitClap={shouldEmitClap} emitLaugh={shouldEmitLaugh} />
 
+            {/* IRポインターオーバーレイ */}
+            <IrPointerOverlay 
+                wiiState={wiiState} 
+                isPlaying={isPlaying} 
+                irCursorEnabled={irCursorEnabled}
+                showIrDebug={showIrDebug}
+            />
+
             {/* スライド表示エリア (全画面・余白なし・アスペクト比維持) */}
             <SlideDisplay
                 currentNode={currentNode}
@@ -824,8 +907,8 @@ export function PresenterView() {
                 wiiState={wiiState}
                 isPlaying={isPlaying}
                 shouldPaint={shouldPaint}
-                eraserMode={false}
-                eraserPosition={null}
+                eraserMode={eraserMode}
+                eraserPosition={cursorPos}
             />
 
             {/* デバッグ情報 (右上) */}
@@ -834,6 +917,8 @@ export function PresenterView() {
                     wiiState={wiiState}
                     pressed={pressed}
                     effectiveProjectBindings={effectiveProjectBindings}
+                    irCursorEnabled={irCursorEnabled}
+                    onToggleIrCursor={() => setIrCursorEnabled(!irCursorEnabled)}
                 />
             )}
 

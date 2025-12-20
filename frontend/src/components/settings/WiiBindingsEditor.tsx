@@ -34,7 +34,8 @@ type FuncId =
 	| "OH_WII"
 	| "UXO_PC"
 	| "UXO_WII"
-	| "REMOVE";
+	| "REMOVE"
+	| "IRSENS";
 
 type Bindings = Record<SlotId, FuncId>;
 
@@ -133,6 +134,8 @@ function funcLabel(f: FuncId): string {
             return "Uxo~🔊[Wii]";
         case "REMOVE":
             return "REMOVE";
+        case "IRSENS":
+            return "IRSENS";
         default:
             return f;
     }
@@ -176,7 +179,7 @@ function getTransfer(e: React.DragEvent): DragPayload | null {
 }
 
 function allFuncs(maxCase: number): FuncId[] {
-    const base: FuncId[] = ["NEXT", "PREV", "HOME", "CLAP", "SMILE", "PLUS", "MINUS", "UP", "DOWN", "A", "B", "PAINT", "ERASER", "SHOT_PC", "SHOT_WII", "OH_PC", "OH_WII", "UXO_PC", "UXO_WII", "REMOVE"];
+    const base: FuncId[] = ["NEXT", "PREV", "HOME", "CLAP", "SMILE", "PLUS", "MINUS", "UP", "DOWN", "A", "B", "PAINT", "ERASER", "SHOT_PC", "SHOT_WII", "OH_PC", "OH_WII", "UXO_PC", "UXO_WII", "REMOVE", "IRSENS"];
     const cases: FuncId[] = ["CASE_A", "CASE_B", "CASE_C", "CASE_D", "CASE_E", "CASE_F", "CASE_G", "CASE_H", "CASE_I"].slice(
         0,
         Math.max(0, Math.min(9, maxCase)),
@@ -236,6 +239,8 @@ function toAction(funcId: FuncId): ButtonBindings[keyof ButtonBindings] {
 			return { type: "sound", kind: "uxo", outputDevice: "wii" };
 		case "REMOVE":
 			return { type: "remove" };
+		case "IRSENS":
+			return { type: "irSens" };
 		case "UP":
 			return { type: "none", subtype: "UP" };
 		case "DOWN":
@@ -405,7 +410,7 @@ export function WiiBindingsEditor(props: { onBack?: () => void }) {
 		const tools: FuncId[] = ["PAINT", "ERASER", "REMOVE"];
 		const soundsPC: FuncId[] = ["SHOT_PC", "OH_PC", "UXO_PC"];
 		const soundsWii: FuncId[] = ["SHOT_WII", "OH_WII", "UXO_WII"];
-		const others: FuncId[] = ["PLUS", "MINUS", "UP", "DOWN", "A", "B"];
+		const others: FuncId[] = ["PLUS", "MINUS", "UP", "DOWN", "A", "B", "IRSENS"];
 		return [
 			{ label: "ナビゲーション", funcs: navigation },
 			{ label: "リアクション", funcs: reactions },
