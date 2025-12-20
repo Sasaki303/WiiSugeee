@@ -137,7 +137,7 @@ export function PresenterView() {
     const [startedWithWii, setStartedWithWii] = useState(false);
     const [playingSince, setPlayingSince] = useState<number>(0);
     const [showDebugPanel, setShowDebugPanel] = useState(true);
-    const [showIrDebug, setShowIrDebug] = useState(false); // IRセンサーデバッグ表示
+    const [showIrDebug, setShowIrDebug] = useState(true); // IRセンサーデバッグ表示
 
     const pdfDocCacheRef = useRef<Map<string, Promise<any>>>(new Map());
 
