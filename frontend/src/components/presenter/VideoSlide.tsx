@@ -8,8 +8,7 @@ interface VideoSlideProps {
 	alt: string;
 }
 
-export function VideoSlide(props: VideoSlideProps) {
-	const { assetId, alt } = props;
+export function VideoSlide({ assetId, alt }: VideoSlideProps) {
 	const [src, setSrc] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 

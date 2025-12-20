@@ -20,7 +20,6 @@ async function showDirectoryPickerCompat(): Promise<FileSystemDirectoryHandle> {
 		}) => Promise<FileSystemDirectoryHandle>;
 	};
 	if (!w.showDirectoryPicker) throw new Error("showDirectoryPicker is not supported");
-	// できるだけデスクトップから始めて、誤ってサイト領域を選ぶ事故を減らす
 	return await w.showDirectoryPicker({ id: "wiislide", mode: "readwrite", startIn: "desktop" });
 }
 

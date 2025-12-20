@@ -8,8 +8,7 @@ interface ImageSlideProps {
 	alt: string;
 }
 
-export function ImageSlide(props: ImageSlideProps) {
-	const { assetId, alt } = props;
+export function ImageSlide({ assetId, alt }: ImageSlideProps) {
 	const [src, setSrc] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 

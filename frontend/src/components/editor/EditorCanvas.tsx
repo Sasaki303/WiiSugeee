@@ -92,7 +92,6 @@ function StarBackground() {
 
 async function pdfToThumbnails(file: File): Promise<Array<{ page: number; dataUrl?: string }>> {
 	const arrayBuffer = await file.arrayBuffer();
-	// pdfjs-dist は bundler 相性があるため legacy を使用
 	const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
 	pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 		"pdfjs-dist/legacy/build/pdf.worker.min.mjs",
@@ -162,7 +161,6 @@ async function videoToThumbnailDataUrl(file: File): Promise<string | undefined> 
 		if (!ctx) return undefined;
 		ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-		// エディタ表示用なので低画質でOK
 		return canvas.toDataURL("image/jpeg", 0.5);
 	} finally {
 		URL.revokeObjectURL(url);
@@ -193,7 +191,6 @@ async function imageToThumbnailDataUrl(file: File): Promise<string | undefined> 
 		if (!ctx) return undefined;
 		ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-		// エディタ表示用なので低画質でOK
 		return canvas.toDataURL("image/jpeg", 0.6);
 	} finally {
 		URL.revokeObjectURL(url);
@@ -218,7 +215,6 @@ function flowFromState(nodes: Node<SlideNodeData>[], edges: Edge[], assets: Proj
 		})),
 	};
 
-	// 追加：エディタが生成した最新flowを「現在プロジェクト」として保持
 	setCurrentFlow(flow);
 
 	return flow;
@@ -295,12 +291,11 @@ function InnerEditor() {
 		setNodes(restoredNodes);
 		setEdges(restoredEdges);
 
-		// ★ここに追加：保存された表示位置があれば復元
 		if (saved.viewport) {
 			setViewport(saved.viewport);
 		}
 		setIsHydrated(true);
-	}, [setEdges, setNodes, setViewport]); // <--- 依存配列に setViewport を追加
+	}, [setEdges, setNodes, setViewport]);
 
 	const currentFlowHash = useMemo(() => {
 		const flow = flowFromState(nodes, edges, assets);
@@ -322,7 +317,7 @@ function InnerEditor() {
 			...flow,
 			viewport: currentViewport,
 		});
-	}, [nodes, edges, assets, getViewport, isHydrated]); // <--- 依存配列に getViewport を追加
+	}, [nodes, edges, assets, getViewport, isHydrated]);
 
 	const onConnect = useCallback(
 		(connection: Connection) => {
@@ -526,7 +521,6 @@ function InnerEditor() {
 			const files = event.dataTransfer?.files;
 			if (!files?.length) return;
 
-			// wiislide.zip をそのままドロップで読み込み
 			if (files.length === 1) {
 				const file = files[0];
 				if (file && file.name.toLowerCase().endsWith(".zip")) {
@@ -558,7 +552,6 @@ function InnerEditor() {
 
 	const onSaveProject = useCallback(async () => {
 		try {
-			// 保存直前に現在状態を反映（import直後でもassetsが落ちないように）
 			const flow = flowFromState(nodes, edges, assets);
 			saveToLocalStorage(flow);
 			await saveProjectAsZip(flow);

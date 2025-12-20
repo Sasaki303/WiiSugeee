@@ -6,89 +6,83 @@ import { loadProjectBindings, saveProjectBindings } from "@/lib/projectBindingsS
 type Listener = () => void;
 
 let currentFlow: SerializedFlow | null = null;
-let currentProjectId = "default"; // ★追加
+let currentProjectId = "default";
 const listeners = new Set<Listener>();
 
 export function setCurrentProjectId(projectId: string) {
-    currentProjectId = projectId || "default";
-    for (const l of listeners) l();
+	currentProjectId = projectId || "default";
+	for (const l of listeners) l();
 }
 
 export function getCurrentProjectId() {
-    return currentProjectId;
+	return currentProjectId;
 }
 
 export function getCurrentFlow(): SerializedFlow | null {
-    return currentFlow;
+	return currentFlow;
 }
 
 export function setCurrentFlow(flow: SerializedFlow | null) {
-    if (flow) {
-        const stored = typeof window !== "undefined" ? loadProjectBindings(currentProjectId) : undefined;
-        currentFlow = stored ? { ...flow, projectBindings: stored } : flow;
-    } else {
-        currentFlow = null;
-    }
-    for (const l of listeners) l();
+	if (flow) {
+		const stored = typeof window !== "undefined" ? loadProjectBindings(currentProjectId) : undefined;
+		currentFlow = stored ? { ...flow, projectBindings: stored } : flow;
+	} else {
+		currentFlow = null;
+	}
+	for (const l of listeners) l();
 }
 
 export function subscribeCurrentFlow(listener: Listener) {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
+	listeners.add(listener);
+	return () => listeners.delete(listener);
 }
 
 export function getProjectBindings(): ButtonBindings | undefined {
-    // ★修正: currentFlowに無くても localStorage から読めるようにする
-    if (currentFlow?.projectBindings) {
-        console.log("[Bindings] Loaded from currentFlow:", currentFlow.projectBindings);
-        return currentFlow.projectBindings;
-    }
-    if (typeof window === "undefined") return undefined;
-    const stored = loadProjectBindings(currentProjectId);
-    console.log(`[Bindings] Loaded from localStorage (projectId: ${currentProjectId}):`, stored);
-    return stored;
+	if (currentFlow?.projectBindings) {
+		return currentFlow.projectBindings;
+	}
+	if (typeof window === "undefined") return undefined;
+	return loadProjectBindings(currentProjectId);
 }
 
 export function setProjectBindings(bindings: ButtonBindings) {
-    // ★修正: currentFlowが無くても保存はできる
-    if (currentFlow) {
-        currentFlow = { ...currentFlow, projectBindings: bindings };
-    }
+	if (currentFlow) {
+		currentFlow = { ...currentFlow, projectBindings: bindings };
+	}
 
-    if (typeof window !== "undefined") {
-        saveProjectBindings(currentProjectId, bindings);
-    }
+	if (typeof window !== "undefined") {
+		saveProjectBindings(currentProjectId, bindings);
+	}
 
-    for (const l of listeners) l();
+	for (const l of listeners) l();
 }
 
-// 音声設定の保存・読み込み
 const SOUND_SETTINGS_KEY_PREFIX = "wiiSugeee_soundSettings_";
 
 export function getSoundSettings(): SoundSettings {
-    if (typeof window === "undefined") {
-        return { ...DEFAULT_SOUND_SETTINGS } as SoundSettings;
-    }
-    
-    const key = SOUND_SETTINGS_KEY_PREFIX + currentProjectId;
-    const stored = localStorage.getItem(key);
-    
-    if (!stored) {
-        return { ...DEFAULT_SOUND_SETTINGS } as SoundSettings;
-    }
-    
-    try {
-        return JSON.parse(stored) as SoundSettings;
-    } catch {
-        return { ...DEFAULT_SOUND_SETTINGS } as SoundSettings;
-    }
+	if (typeof window === "undefined") {
+		return { ...DEFAULT_SOUND_SETTINGS };
+	}
+
+	const key = SOUND_SETTINGS_KEY_PREFIX + currentProjectId;
+	const stored = localStorage.getItem(key);
+
+	if (!stored) {
+		return { ...DEFAULT_SOUND_SETTINGS };
+	}
+
+	try {
+		return JSON.parse(stored) as SoundSettings;
+	} catch {
+		return { ...DEFAULT_SOUND_SETTINGS };
+	}
 }
 
 export function setSoundSettings(settings: SoundSettings) {
-    if (typeof window === "undefined") return;
-    
-    const key = SOUND_SETTINGS_KEY_PREFIX + currentProjectId;
-    localStorage.setItem(key, JSON.stringify(settings));
-    
-    for (const l of listeners) l();
+	if (typeof window === "undefined") return;
+
+	const key = SOUND_SETTINGS_KEY_PREFIX + currentProjectId;
+	localStorage.setItem(key, JSON.stringify(settings));
+
+	for (const l of listeners) l();
 }

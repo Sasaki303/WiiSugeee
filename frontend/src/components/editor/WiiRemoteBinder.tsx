@@ -8,14 +8,12 @@ import { decodeAction, encodeAction, formatAction, mergeBindings } from "@/lib/b
 type Hotspot = {
 	button: WiiButton;
 	label: string;
-	// 画像上の相対座標（0..1）。後で実写画像に合わせて微調整する前提。
 	x: number;
 	y: number;
 	w: number;
 	h: number;
 };
 
-// NOTE: 実写画像が決まったら座標を調整してください。
 const HOTSPOTS: Hotspot[] = [
 	{ button: "Up", label: "↑", x: 0.28, y: 0.33, w: 0.12, h: 0.08 },
 	{ button: "Left", label: "←", x: 0.18, y: 0.41, w: 0.12, h: 0.08 },
@@ -85,7 +83,6 @@ export function WiiRemoteBinder(props: {
 						</div>
 					)}
 
-					{/* ホットスポット */}
 					{HOTSPOTS.map((h) => {
 						const isSel = selected === h.button;
 						return (
@@ -112,7 +109,6 @@ export function WiiRemoteBinder(props: {
 				</div>
 			</div>
 
-			{/* 注釈/編集パネル */}
 			<div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 14, background: "white" }}>
 				<div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>ボタン割り当て（スライド別）</div>
 

@@ -11,13 +11,12 @@ export type BindingAction =
 	| { type: "reaction"; kind: "clap" | "laugh" }
 	| { type: "paint" }
 	| { type: "eraser" }
-    | { type: "sound"; kind: "shot" | "oh" | "uxo"; outputDevice?: "pc" | "wii" }
-    | { type: "remove" }
-    | { type: "irSens" }; // ★追加: IRセンサーカーソル切替
+	| { type: "sound"; kind: "shot" | "oh" | "uxo"; outputDevice?: "pc" | "wii" }
+	| { type: "remove" }
+	| { type: "irSens" };
 
 export type ButtonBindings = Partial<Record<WiiButton, BindingAction>>;
 
-// 音声出力デバイスの設定
 export type SoundOutputDevice = "pc" | "wii";
 
 export interface SoundSettings {

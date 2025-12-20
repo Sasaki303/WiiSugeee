@@ -65,7 +65,6 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 export async function saveProjectAsZip(flow: SerializedFlow): Promise<void> {
-	// ★追加: localStorageから最新のボタンバインド設定を取得してflowに含める
 	const latestBindings = getProjectBindings();
 	const flowWithBindings: SerializedFlow = latestBindings
 		? { ...flow, projectBindings: latestBindings }
@@ -108,11 +107,9 @@ export async function loadProjectFromZipFile(file: File): Promise<SerializedFlow
 		await putAssetBlob(asset.id, blob);
 	}
 
-	// ★追加: ボタンバインド情報をlocalStorageに保存
 	if (parsed.projectBindings) {
 		const projectId = getCurrentProjectId();
 		saveProjectBindings(projectId, parsed.projectBindings);
-		console.log("ボタンバインド設定を復元しました:", projectId, parsed.projectBindings);
 	}
 
 	saveToLocalStorage(parsed);

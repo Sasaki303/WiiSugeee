@@ -11,8 +11,7 @@ export default function Home() {
     const { wiiConnected } = useWiiController();
     const [isDark, setIsDark] = useState(true);
 
-    // ダークモード設定を検出
-    useEffect(() => {
+	useEffect(() => {
         const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
         setIsDark(mediaQuery.matches);
 
@@ -24,22 +23,14 @@ export default function Home() {
         return () => mediaQuery.removeEventListener("change", handleChange);
     }, []);
 
-    /**
-     * Zipファイルからプロジェクトを読み込み、エディタ画面へ遷移するハンドラー
-     */
     const onLoadProject = useCallback(async () => {
-        try {
-            // Zipの解析とデータの展開処理を実行
-            await loadProjectFromZip();
-            // 成功したらエディタページへ移動
-            router.push("/editor");
-        } catch (e) {
-            // エラーが発生した場合は、メッセージをアラートで表示
-            alert(
-                `読み込みに失敗しました: ${e instanceof Error ? e.message : String(e)}`,
-            );
-        }
-    }, [router]);
+		try {
+			await loadProjectFromZip();
+			router.push("/editor");
+		} catch (e) {
+			alert(`読み込みに失敗しました: ${e instanceof Error ? e.message : String(e)}`);
+		}
+	}, [router]);
 
 	const menuItems = [
 		{ label: "エディタを開く", href: "/editor", icon: "✏️" },
@@ -48,8 +39,7 @@ export default function Home() {
 		{ label: "ムービーを見る", href: "/movie", icon: "🎬" },
 	];
 
-    // カラースキーム設定
-    const colors = {
+	const colors = {
         bg: isDark ? "#000000" : "#FFFFFF",
         text: isDark ? "#FFFFFF" : "#000000",
         button: isDark ? "#333333" : "#FFFFFF",
@@ -61,10 +51,9 @@ export default function Home() {
         wiiRemoteImage: isDark ? "/phKuro 3.png" : "/phShiro 3.png",
         lineBorder: "#87CEEB",
         headerFooterBg: isDark ? "#333333" : "#F5F5F5",
-    };
+	};
 
-    // ボタンのベーススタイル（1〜4のボタンは統一サイズ）
-    const buttonBaseStyle: React.CSSProperties = {
+	const buttonBaseStyle: React.CSSProperties = {
         border: `3px solid ${colors.buttonBorder}`,
         backgroundColor: colors.button,
         borderRadius: "80px",
@@ -99,18 +88,16 @@ export default function Home() {
             fontFamily: "var(--font-geist-sans)",
             backgroundColor: colors.bg,
             color: colors.text,
-        }}>
-            {/* ========== ヘッダーエリア ========== */}
-            <header style={{
+		}}>
+			<header style={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "flex-start",
                 padding: "20px 40px",
                 borderBottom: `2px solid ${colors.lineBorder}`,
                 backgroundColor: colors.headerFooterBg,
-            }}>
-                {/* 左側：タイトル */}
-                <h1 style={{
+			}}>
+				<h1 style={{
                     fontSize: "48px",
                     fontWeight: "700",
                     margin: "0",
@@ -120,15 +107,13 @@ export default function Home() {
                     <span style={{ fontFamily: "ContinuumMedium, sans-serif" }}>Can</span>
                 </h1>
 
-                {/* 右側：ボタンとロゴを縦積み */}
-                <div style={{
+				<div style={{
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
                     gap: "10px",
-                }}>
-                    {/* ⑤使い方へ遷移するボタン */}
-                    <Link href="/how-to-use"
+				}}>
+					<Link href="/how-to-use"
                         style={{
                             ...smallButtonStyle,
                             textDecoration: "none",
@@ -149,16 +134,14 @@ export default function Home() {
                 </div>
             </header>
 
-            {/* ========== メインエリア ========== */}
-            <main style={{
+			<main style={{
                 flex: 1,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 padding: "40px",
-            }}>
-                {/* 2列2行グリッド */}
-                <div style={{
+			}}>
+				<div style={{
                     display: "grid",
                     gridTemplateColumns: "1fr 1fr",
                     gap: "30px",
@@ -211,8 +194,7 @@ export default function Home() {
                 </div>
             </main>
 
-            {/* ========== フッターエリア ========== */}
-            <footer style={{
+			<footer style={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
@@ -221,21 +203,18 @@ export default function Home() {
                 backgroundColor: colors.headerFooterBg,
                 maxHeight: "80px",
                 gap: "10px",
-            }}>
-                {/* 左側：Wiiリモコン情報 */}
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    {/* Wiiリモコン画像 - 常に表示 */}
-                    <img
+			}}>
+				<div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+					<img
                         src={colors.wiiRemoteImage}
                         alt="Wii Remote"
                         style={{
                             width: "90px",
                             height: "200px",
                             opacity: wiiConnected ? 1 : 0.5,
-                        }}
-                    />
-                    {/* 接続状態テキスト */}
-                    {wiiConnected ? (
+						}}
+					/>
+					{wiiConnected ? (
                         <span style={{
                             fontSize: "20px",
                             fontWeight: "bold",
@@ -254,8 +233,7 @@ export default function Home() {
                     )}
                 </div>
 
-                {/* 右側：ロゴ */}
-                <img
+				<img
                     src={isDark ? "/stevenShiro.png" : "/stevenKuro.png"}
                     alt="Logo"
                     style={{

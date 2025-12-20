@@ -7,26 +7,27 @@ interface PdfSlideProps {
 	page: number;
 	fallbackDataUrl?: string;
 	alt: string;
-	getOrLoadPdfDocument: (assetId: string) => Promise<any>;
+	getOrLoadPdfDocument: (assetId: string) => Promise<unknown>;
 }
 
-export function PdfSlide(props: PdfSlideProps) {
-	const { assetId, page, fallbackDataUrl, alt, getOrLoadPdfDocument } = props;
+export function PdfSlide({ assetId, page, fallbackDataUrl, alt, getOrLoadPdfDocument }: PdfSlideProps) {
 	const wrapperRef = useRef<HTMLDivElement | null>(null);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const [size, setSize] = useState<{ w: number; h: number } | null>(null);
 	const [renderError, setRenderError] = useState<string | null>(null);
-	const renderTaskRef = useRef<any>(null);
+	const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
 
 	useEffect(() => {
 		const el = wrapperRef.current;
 		if (!el) return;
+
 		const update = () => {
 			const rect = el.getBoundingClientRect();
 			setSize({ w: Math.max(0, rect.width), h: Math.max(0, rect.height) });
 		};
 		update();
-		const ro = new ResizeObserver(() => update());
+
+		const ro = new ResizeObserver(update);
 		ro.observe(el);
 		return () => ro.disconnect();
 	}, []);
@@ -42,18 +43,23 @@ export function PdfSlide(props: PdfSlideProps) {
 				const canvas = canvasRef.current;
 				if (!el || !canvas || !size || size.w === 0 || size.h === 0) return;
 
-				// 既存のレンダリングをキャンセル
 				if (renderTaskRef.current) {
 					try {
 						renderTaskRef.current.cancel();
-					} catch (e) {
-						// キャンセル済みの場合は無視
+					} catch {
+						// Already cancelled
 					}
 					renderTaskRef.current = null;
 				}
 
-				const pdf = await getOrLoadPdfDocument(assetId);
+				const pdf = (await getOrLoadPdfDocument(assetId)) as {
+					getPage: (page: number) => Promise<{
+						getViewport: (options: { scale: number }) => { width: number; height: number };
+						render: (options: { canvasContext: CanvasRenderingContext2D; canvas: HTMLCanvasElement; viewport: unknown }) => { promise: Promise<void> };
+					}>;
+				};
 				if (cancelled) return;
+
 				const pdfPage = await pdf.getPage(page);
 				if (cancelled) return;
 
@@ -74,15 +80,16 @@ export function PdfSlide(props: PdfSlideProps) {
 				ctx.clearRect(0, 0, canvas.width, canvas.height);
 
 				const task = pdfPage.render({ canvasContext: ctx, canvas, viewport: renderViewport });
-				renderTaskRef.current = task;
+				renderTaskRef.current = task as unknown as { cancel: () => void };
 
 				await task.promise;
 
-				if (renderTaskRef.current === task) {
+				if (renderTaskRef.current === (task as unknown)) {
 					renderTaskRef.current = null;
 				}
-			} catch (e: any) {
-				const msg = e?.name === "RenderingCancelledException" ? null : (e instanceof Error ? e.message : String(e));
+			} catch (e: unknown) {
+				const error = e as { name?: string; message?: string };
+				const msg = error?.name === "RenderingCancelledException" ? null : error?.message || String(e);
 				if (!cancelled && msg) setRenderError(msg);
 			}
 		})();
@@ -94,7 +101,7 @@ export function PdfSlide(props: PdfSlideProps) {
 					renderTaskRef.current.cancel();
 					renderTaskRef.current = null;
 				} catch {
-					// 既にキャンセル済みの場合は無視
+					// Already cancelled
 				}
 			}
 		};

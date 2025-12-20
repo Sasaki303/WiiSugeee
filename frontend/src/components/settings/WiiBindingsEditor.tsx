@@ -41,7 +41,6 @@ type Bindings = Record<SlotId, FuncId>;
 
 type Rect = { x: number; y: number; w: number; h: number };
 
-// 3500x3500 のSVG前提（viewBox座標）
 const SLOT_SIZE = { w: 350, h: 136 };
 
 const SLOTS_RECT: Record<SlotId, Rect> = {
@@ -58,7 +57,6 @@ const SLOTS_RECT: Record<SlotId, Rect> = {
 	RIGHT: { x: 1649, y: 805, w: SLOT_SIZE.w, h: SLOT_SIZE.h },
 };
 
-// デフォルトのバインディング（指定どおり）
 const DEFAULT_BINDINGS: Bindings = {
     RIGHT: "NEXT",
     LEFT: "PREV",
@@ -161,11 +159,10 @@ type DragPayload =
     | { kind: "slot"; slotId: SlotId }; // スロットから（swap用）
 
 function setTransfer(e: React.DragEvent, payload: DragPayload) {
-    const json = JSON.stringify(payload);
-    e.dataTransfer.setData("application/json", json);
-    // 一部ブラウザで application/json が落ちる場合に備えて text/plain も入れる
-    e.dataTransfer.setData("text/plain", json);
-    e.dataTransfer.effectAllowed = "move";
+	const json = JSON.stringify(payload);
+	e.dataTransfer.setData("application/json", json);
+	e.dataTransfer.setData("text/plain", json);
+	e.dataTransfer.effectAllowed = "move";
 }
 
 function getTransfer(e: React.DragEvent): DragPayload | null {
@@ -349,21 +346,20 @@ export function WiiBindingsEditor(props: { onBack?: () => void }) {
     }, [bindings, savedBindings]);
 
     const onSave = useCallback(() => {
-        setProjectBindings(toButtonBindings(bindings)); // localStorageへ保存
-        setSavedBindings(bindings);
-    }, [bindings]);
+		setProjectBindings(toButtonBindings(bindings));
+		setSavedBindings(bindings);
+	}, [bindings]);
 
     const onResetToDefault = () => {
         setBindings(DEFAULT_BINDINGS);
     };
 
     const reloadFromStorage = () => {
-        const next = readStored(); // localStorageから再読込
-        setBindings(next);
-        setSavedBindings(next);
-    };
+		const next = readStored();
+		setBindings(next);
+		setSavedBindings(next);
+	};
 
-    // --- ★追加: 戻る確認モーダル（3択） ---
     const [showBackModal, setShowBackModal] = useState(false);
 
     const requestBack = useCallback(() => {
@@ -374,12 +370,11 @@ export function WiiBindingsEditor(props: { onBack?: () => void }) {
         setShowBackModal(true);
     }, [isDirty, props.onBack]);
 
-    // settings/page.tsx から window イベントで呼び出す
     useEffect(() => {
-        const handler = () => requestBack();
-        window.addEventListener("wiibindings:requestBack", handler);
-        return () => window.removeEventListener("wiibindings:requestBack", handler);
-    }, [requestBack]);
+		const handler = () => requestBack();
+		window.addEventListener("wiibindings:requestBack", handler);
+		return () => window.removeEventListener("wiibindings:requestBack", handler);
+	}, [requestBack]);
 
     const doSaveAndBack = useCallback(() => {
         onSave();
@@ -388,13 +383,12 @@ export function WiiBindingsEditor(props: { onBack?: () => void }) {
     }, [onSave, props.onBack]);
 
     const doDiscardAndBack = useCallback(() => {
-        // 破棄＝保存済みに戻す
-        const next = readStored();
-        setBindings(next);
-        setSavedBindings(next);
-        setShowBackModal(false);
-        props.onBack?.();
-    }, [props.onBack]);
+		const next = readStored();
+		setBindings(next);
+		setSavedBindings(next);
+		setShowBackModal(false);
+		props.onBack?.();
+	}, [props.onBack]);
 
     const doCancelBack = useCallback(() => {
         setShowBackModal(false);
@@ -403,7 +397,6 @@ export function WiiBindingsEditor(props: { onBack?: () => void }) {
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
 
-	// 機能ブロックをカテゴリごとにグループ化
 	const groupedFuncs = useMemo(() => {
 		const navigation: FuncId[] = ["NEXT", "PREV", "HOME"];
 		const reactions: FuncId[] = ["CLAP", "SMILE"];
@@ -456,8 +449,7 @@ export function WiiBindingsEditor(props: { onBack?: () => void }) {
                 position: "relative",
             }}
         >
-            {/* ★追加: 戻る確認モーダル */}
-            {showBackModal ? (
+			{showBackModal && (
                 <div
                     role="dialog"
                     aria-modal="true"
@@ -542,11 +534,10 @@ export function WiiBindingsEditor(props: { onBack?: () => void }) {
                         </div>
                     </div>
                 </div>
-            ) : null}
+            )}
 
-            {/* 左：SVG + 11スロット */}
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden", background: "transparent" }}>
-				<svg
+		<div style={{ border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden", background: "transparent" }}>
+			<svg
 					viewBox="800 500 2000 2400"
 					style={{ width: "100%", height: "82vh", display: "block", background: "#fff" }}
 				>
@@ -617,10 +608,9 @@ export function WiiBindingsEditor(props: { onBack?: () => void }) {
 						</g>
 					);
 				})}
-			</svg>
+	</svg>
 		</div>
 
-		{/* 右：機能ブロック一覧 */}
 		<div
 			style={{
 				border: "1px solid #e5e7eb",
@@ -638,7 +628,6 @@ export function WiiBindingsEditor(props: { onBack?: () => void }) {
 				<div style={{ fontSize: 12, color: "#6b7280" }}>{totalFuncs} 件</div>
 			</div>
 
-			{/* ★追加: 音声出力デバイス選択 */}
 			<div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
 				<button
 					onClick={onSave}
