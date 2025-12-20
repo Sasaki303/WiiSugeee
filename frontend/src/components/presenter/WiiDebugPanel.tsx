@@ -147,7 +147,7 @@ export function WiiDebugPanel({ wiiState, pressed, effectiveProjectBindings, irC
 							width: "100%",
 						}}
 					>
-						{irCursorEnabled ? "🎯 IR Cursor: ON" : "IR Cursor: OFF"}
+						{irCursorEnabled ? "IR Cursor: ON" : "IR Cursor: OFF"}
 					</button>
 				</div>
 			)}

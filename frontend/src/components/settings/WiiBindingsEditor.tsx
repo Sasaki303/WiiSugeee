@@ -284,6 +284,7 @@ function fromAction(a: ButtonBindings[keyof ButtonBindings] | undefined, fallbac
 		if (a.kind === "oh") return device === "wii" ? "OH_WII" : "OH_PC";
 		if (a.kind === "uxo") return device === "wii" ? "UXO_WII" : "UXO_PC";
 	}
+	if (a.type === "irSens") return "IRSENS";
 	if (a.type === "branchIndex") {
 		const map: Record<number, FuncId> = {
 			1: "CASE_A",
