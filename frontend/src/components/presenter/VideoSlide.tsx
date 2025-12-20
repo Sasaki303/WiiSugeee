@@ -49,7 +49,6 @@ export function VideoSlide(props: VideoSlideProps) {
 			style={{ width: "100%", height: "100%", objectFit: "contain" }}
 			controls
 			autoPlay
-			muted
 			playsInline
 			aria-label={alt}
 		/>
