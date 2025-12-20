@@ -28,9 +28,12 @@ type FuncId =
 	| "CASE_I"
 	| "PAINT"
 	| "ERASER"
-	| "SHOT"
-	| "OH"
-	| "UXO"
+	| "SHOT_PC"
+	| "SHOT_WII"
+	| "OH_PC"
+	| "OH_WII"
+	| "UXO_PC"
+	| "UXO_WII"
 	| "REMOVE";
 
 type Bindings = Record<SlotId, FuncId>;
@@ -116,12 +119,18 @@ function funcLabel(f: FuncId): string {
             return "PAINT🎨";
         case "ERASER":
             return "ERASER";
-        case "SHOT":
-            return "SHOT🔊";
-        case "OH":
-            return "Oh...🔊";
-        case "UXO":
-            return "Uxo~🔊";
+        case "SHOT_PC":
+            return "SHOT🔊[PC]";
+        case "SHOT_WII":
+            return "SHOT🔊[Wii]";
+        case "OH_PC":
+            return "Oh...🔊[PC]";
+        case "OH_WII":
+            return "Oh...🔊[Wii]";
+        case "UXO_PC":
+            return "Uxo~🔊[PC]";
+        case "UXO_WII":
+            return "Uxo~🔊[Wii]";
         case "REMOVE":
             return "REMOVE";
         default:
@@ -167,7 +176,7 @@ function getTransfer(e: React.DragEvent): DragPayload | null {
 }
 
 function allFuncs(maxCase: number): FuncId[] {
-    const base: FuncId[] = ["NEXT", "PREV", "HOME", "CLAP", "SMILE", "PLUS", "MINUS", "UP", "DOWN", "A", "B", "PAINT", "ERASER", "SHOT", "OH", "UXO", "REMOVE"];
+    const base: FuncId[] = ["NEXT", "PREV", "HOME", "CLAP", "SMILE", "PLUS", "MINUS", "UP", "DOWN", "A", "B", "PAINT", "ERASER", "SHOT_PC", "SHOT_WII", "OH_PC", "OH_WII", "UXO_PC", "UXO_WII", "REMOVE"];
     const cases: FuncId[] = ["CASE_A", "CASE_B", "CASE_C", "CASE_D", "CASE_E", "CASE_F", "CASE_G", "CASE_H", "CASE_I"].slice(
         0,
         Math.max(0, Math.min(9, maxCase)),
@@ -213,12 +222,18 @@ function toAction(funcId: FuncId): ButtonBindings[keyof ButtonBindings] {
 			return { type: "paint" };
 		case "ERASER":
 			return { type: "eraser" };
-		case "SHOT":
-			return { type: "sound", kind: "shot" };
-		case "OH":
-			return { type: "sound", kind: "oh" };
-		case "UXO":
-			return { type: "sound", kind: "uxo" };
+		case "SHOT_PC":
+			return { type: "sound", kind: "shot", outputDevice: "pc" };
+		case "SHOT_WII":
+			return { type: "sound", kind: "shot", outputDevice: "wii" };
+		case "OH_PC":
+			return { type: "sound", kind: "oh", outputDevice: "pc" };
+		case "OH_WII":
+			return { type: "sound", kind: "oh", outputDevice: "wii" };
+		case "UXO_PC":
+			return { type: "sound", kind: "uxo", outputDevice: "pc" };
+		case "UXO_WII":
+			return { type: "sound", kind: "uxo", outputDevice: "wii" };
 		case "REMOVE":
 			return { type: "remove" };
 		case "UP":
@@ -259,9 +274,10 @@ function fromAction(a: ButtonBindings[keyof ButtonBindings] | undefined, fallbac
 	if (a.type === "eraser") return "ERASER";
 	if (a.type === "remove") return "REMOVE";
 	if (a.type === "sound") {
-		if (a.kind === "shot") return "SHOT";
-		if (a.kind === "oh") return "OH";
-		if (a.kind === "uxo") return "UXO";
+		const device = a.outputDevice || "pc";
+		if (a.kind === "shot") return device === "wii" ? "SHOT_WII" : "SHOT_PC";
+		if (a.kind === "oh") return device === "wii" ? "OH_WII" : "OH_PC";
+		if (a.kind === "uxo") return device === "wii" ? "UXO_WII" : "UXO_PC";
 	}
 	if (a.type === "branchIndex") {
 		const map: Record<number, FuncId> = {

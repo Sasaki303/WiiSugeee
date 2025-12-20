@@ -25,14 +25,85 @@ export function PresenterView() {
     // Wiiリモコンの状態を取得
 	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt, playWiiSound } = useWiiController();
 
-	// PC側では鳴らさず、Wiiリモコン側のスピーカーで鳴らす
-	const playSound = useCallback(
+	// PC側の音声再生用（HTMLAudioElement）
+	const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
+	const audioUnlockedRef = useRef(false);
+	const unlockRequestedRef = useRef(false);
+	const pendingSoundRef = useRef<"q" | "w" | "e" | null>(null);
+
+	const tryUnlockAudio = useCallback(async () => {
+		if (audioUnlockedRef.current) return;
+		if (!unlockRequestedRef.current) return;
+
+		const { q, w, e } = soundboardRef.current;
+		const audios = [q, w, e].filter(Boolean) as HTMLAudioElement[];
+		if (audios.length === 0) return;
+
+		try {
+			const a = audios[0];
+			const prevMuted = a.muted;
+			const prevVolume = a.volume;
+			a.muted = true;
+			a.volume = 0;
+			await a.play();
+			a.pause();
+			a.currentTime = 0;
+			a.muted = prevMuted;
+			a.volume = prevVolume;
+			audioUnlockedRef.current = true;
+
+			const pending = pendingSoundRef.current;
+			pendingSoundRef.current = null;
+			if (pending) {
+				const next = soundboardRef.current[pending];
+				if (next) {
+					next.currentTime = 0;
+					void next.play().catch((err) => {
+						console.warn("sound play failed", pending, err);
+					});
+				}
+			}
+		} catch (err) {
+			console.warn("audio unlock failed", err);
+		}
+	}, []);
+
+	// PC側で音声を再生（HTMLAudio）
+	const playSoundOnPC = useCallback((key: "q" | "w" | "e") => {
+		const a = soundboardRef.current[key];
+		if (!a) return;
+		if (!audioUnlockedRef.current) {
+			pendingSoundRef.current = key;
+			return;
+		}
+
+		a.currentTime = 0;
+		void a.play().catch((err) => {
+			pendingSoundRef.current = key;
+			console.warn("sound play failed", key, err);
+		});
+	}, []);
+
+	// Wiiリモコン側で音声を再生
+	const playSoundOnWii = useCallback(
 		(key: "q" | "w" | "e") => {
 			if (key === "q") playWiiSound("shot");
 			else if (key === "e") playWiiSound("oh");
 			else playWiiSound("uxo");
 		},
 		[playWiiSound],
+	);
+
+	// 汎用の音声再生関数（outputDeviceで出力先を指定）
+	const playSound = useCallback(
+		(key: "q" | "w" | "e", outputDevice: "pc" | "wii" = "pc") => {
+			if (outputDevice === "wii") {
+				playSoundOnWii(key);
+			} else {
+				playSoundOnPC(key);
+			}
+		},
+		[playSoundOnPC, playSoundOnWii],
 	);
 
     const returnTo = useMemo(() => {
@@ -57,6 +128,46 @@ export function PresenterView() {
 
     // ★修正: 常にplaying状態として扱う（flow/currentNodeIdがあれば再生中）
     const isPlaying = flow != null && currentNodeId != null;
+
+	// PC側音声の初期化
+	useEffect(() => {
+		const q = new Audio("https://www.myinstants.com/media/sounds/nice-shot-wii-sports_DJJ0VOz.mp3");
+		const w = new Audio("https://www.myinstants.com/media/sounds/crowdaw.mp3");
+		const e = new Audio("https://www.myinstants.com/media/sounds/crowdoh.mp3");
+		q.preload = "auto";
+		w.preload = "auto";
+		e.preload = "auto";
+		soundboardRef.current = { q, w, e };
+		void tryUnlockAudio();
+		return () => {
+			for (const a of [q, w, e]) {
+				try {
+					a.pause();
+				} catch {
+					// ignore
+				}
+			}
+			soundboardRef.current = {};
+		};
+	}, [tryUnlockAudio]);
+
+	// 初回ユーザー操作で音声をアンロック
+	useEffect(() => {
+		const onFirstUserGesture = () => {
+			unlockRequestedRef.current = true;
+			void tryUnlockAudio();
+		};
+
+		window.addEventListener("pointerdown", onFirstUserGesture, { once: true });
+		window.addEventListener("keydown", onFirstUserGesture, { once: true });
+		window.addEventListener("touchstart", onFirstUserGesture, { once: true });
+
+		return () => {
+			window.removeEventListener("pointerdown", onFirstUserGesture);
+			window.removeEventListener("keydown", onFirstUserGesture);
+			window.removeEventListener("touchstart", onFirstUserGesture);
+		};
+	}, [tryUnlockAudio]);
 
     // スペースキーでデバッグパネルの表示/非表示を切り替え
     useEffect(() => {
@@ -387,10 +498,10 @@ export function PresenterView() {
 					}
 					break;
 				case "sound":
-					// 音声再生処理
-				if (act.kind === "shot") playSound("q");
-				else if (act.kind === "oh") playSound("e");
-				else if (act.kind === "uxo") playSound("w");
+					// 音声再生処理（outputDeviceに応じてPCまたはWiiで再生）
+					if (act.kind === "shot") playSound("q", act.outputDevice);
+					else if (act.kind === "oh") playSound("e", act.outputDevice);
+					else if (act.kind === "uxo") playSound("w", act.outputDevice);
 					return;
 				case "remove":
 					// 描画を消去
