@@ -353,13 +353,19 @@ export function PresenterView() {
     }, [isPlaying, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches, playSound]);
 
     const effectiveProjectBindings = useMemo(() => {
-        const merged = mergeBindings(flow?.projectBindings);
-        console.log("PresenterView: effectiveProjectBindings updated", { 
-            flowBindings: flow?.projectBindings, 
-            merged 
+        // プロジェクト全体の割当 + スライド別の割当（あれば上書き）を合成
+        const combined = {
+            ...(flow?.projectBindings ?? {}),
+            ...(currentNode?.data.bindings ?? {}),
+        };
+        const merged = mergeBindings(combined);
+        console.log("PresenterView: effectiveProjectBindings updated", {
+            flowBindings: flow?.projectBindings,
+            slideBindings: currentNode?.data.bindings,
+            merged,
         });
         return merged;
-    }, [flow]);
+    }, [flow, currentNode]);
 
     // --- プロジェクト全体バインドを適用してアクション実行 ---
     const runAction = useCallback(
@@ -368,6 +374,9 @@ export function PresenterView() {
             if (eraserMode && act.type !== "eraser") {
                 return;
             }
+            
+            // ★デバッグ: アクション実行をログ出力
+            console.log(`[WiiAction] Button: ${btnName || "unknown"}, Action:`, act);
             
             switch (act.type) {
 				case "next":
@@ -430,16 +439,17 @@ export function PresenterView() {
     );
 
     // ★修正: Wiiリモコンのボタン処理（isPlayingがtrueの時のみ動作）
-    const prevPressedRef = useRef<Record<string, boolean>>({});
+    // pressed は「このフレームで押された瞬間」のボタンのみ含む（useWiiController側で処理済み）
     useEffect(() => {
         if (!isPlaying) return;
 
-        // そのフレームで「押された瞬間」のボタンだけ処理（押しっぱなしで連打しない）
-        const prevPressed = prevPressedRef.current;
+        // pressedに含まれるボタンを全て処理（既に「押された瞬間」のみ抽出済み）
         for (const btn of Object.keys(pressed)) {
             const isDown = (pressed as Record<string, boolean>)[btn];
-            const wasDown = !!prevPressed[btn];
-            if (!isDown || wasDown) continue;
+            if (!isDown) continue;
+            
+            // ★デバッグ: ボタン押下検出をログ出力
+            console.log(`[WiiPress] Button pressed: ${btn}`);
 
             const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn] ?? { type: "none" };
             
@@ -451,7 +461,6 @@ export function PresenterView() {
                 runAction(act, btn);
             }
         }
-        prevPressedRef.current = { ...(pressed as Record<string, boolean>) };
     }, [pressed, isPlaying, effectiveProjectBindings, runAction]);
 
     // ★追加: リアクション検出（バインドベース）
@@ -625,33 +634,14 @@ export function PresenterView() {
             onMouseMove={(e) => {
                 if (!isPlaying) return;
                 
-                // 消しゴムモード時：常にカーソル位置を更新
-                if (eraserMode) {
-                    setCursorPos({ x: e.clientX, y: e.clientY });
-                    
-                    // 左クリック中またはA+B同時押し中に消去
-                    const isAPressed = wiiState?.buttons.A || false;
-                    const isBPressed = wiiState?.buttons.B || false;
-                    const shouldErase = isMouseDrawingRef.current || (isAPressed && isBPressed);
-                    
-                    if (shouldErase) {
-                        e.preventDefault();
-                        setDrawingPoints((prev) => {
-                            const last = prev[prev.length - 1];
-                            if (last && last.x && Math.abs(last.x - e.clientX) + Math.abs(last.y - e.clientY) < 2) return prev;
-                            return [...prev, { x: e.clientX, y: e.clientY, mode: "erase" }];
-                        });
-                        
-                        // A+Bでの描画フラグを立てる
-                        if (isAPressed && isBPressed && !wasWiiADownRef.current) {
-                            wasWiiADownRef.current = true;
-                            setDrawingPoints((prev) => {
-                                const next = prev.slice();
-                                if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
-                                return next;
-                            });
-                        }
-                    }
+                // 消しゴムモード時：マウスでの消去（IRセンサーがない場合のフォールバック）
+                if (eraserMode && isMouseDrawingRef.current) {
+                    e.preventDefault();
+                    setDrawingPoints((prev) => {
+                        const last = prev[prev.length - 1];
+                        if (last && last.x && Math.abs(last.x - e.clientX) + Math.abs(last.y - e.clientY) < 2) return prev;
+                        return [...prev, { x: e.clientX, y: e.clientY, mode: "erase" }];
+                    });
                     return;
                 }
                 
@@ -739,8 +729,8 @@ export function PresenterView() {
                 wiiState={wiiState}
                 isPlaying={isPlaying}
                 shouldPaint={shouldPaint}
-                eraserMode={false}
-                eraserPosition={null}
+                eraserMode={eraserMode}
+                eraserPosition={cursorPos}
             />
 
             {/* デバッグ情報 (右上) */}

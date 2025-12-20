@@ -102,6 +102,10 @@ export function useWiiController() {
 	const pressedBufferRef = useRef<Partial<WiiState["buttons"]>>({});
 	const prevButtonsRef = useRef<WiiState["buttons"] | null>(null);
 	const lastUpdateRef = useRef<number>(0);
+	// ★追加: 最新のWiiデータを保持（rAFで参照）
+	const latestWiiDataRef = useRef<WiiState | null>(null);
+	// ★追加: pressed状態を累積して保持し、次のflushで消費する
+	const pendingPressedRef = useRef<Partial<WiiState["buttons"]>>({});
 
 	// --- キーボードの押下状態（ホールド） ---
 	const kbButtonsRef = useRef<WiiState["buttons"]>({ ...EMPTY_BUTTONS });
@@ -177,27 +181,24 @@ export function useWiiController() {
 				}
 
 				const data = msg as WiiState;
-				const now = performance.now();
 
 				setWiiConnected(true);
 				wasConnectedRef.current = true; // ★追加: データが来ている=接続できている
 
-				// Wii側の「押された瞬間」検知
+				// Wii側の「押された瞬間」検知 - pressedBufferに追加（rAFで消費）
 				if (prevButtonsRef.current) {
 					(Object.keys(data.buttons) as Array<keyof WiiState["buttons"]>).forEach((key) => {
 						if (data.buttons[key] && !prevButtonsRef.current![key]) {
 							pressedBufferRef.current[key] = true;
+							console.log(`[WS] Button pressed detected: ${key}`); // デバッグ
 						}
 					});
 				}
 				prevButtonsRef.current = data.buttons;
 
-				// 更新頻度制限（ただし常に最新データを反映）
-				const shouldUpdate = now - lastUpdateRef.current > 33;
-				flushState(data);
-				if (shouldUpdate) {
-					lastUpdateRef.current = now;
-				}
+				// ★修正: flushStateは呼ばず、最新データをRefに保存するだけ
+				// rAFループで統一的にstate更新する
+				latestWiiDataRef.current = data;
 			} catch (e) {
 				console.error("Parse error:", e);
 			}
@@ -233,12 +234,14 @@ export function useWiiController() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	// Wiiから来ない場合でも、キーボードの変化で state/pressed を更新するための tick
+	// ★修正: rAFループでstate更新（WebSocket受信とは分離）
 	useEffect(() => {
 		let raf = 0;
 
 		const loop = () => {
-			flushState(null);
+			// 最新のWiiデータを取得（あれば）
+			const wiiData = latestWiiDataRef.current;
+			flushState(wiiData);
 			raf = window.requestAnimationFrame(loop);
 		};
 
@@ -266,13 +269,25 @@ export function useWiiController() {
 			Left: (wiiButtons?.Left ?? false) || kbButtons.Left,
 		};
 
-		// 「このフレームで押された」も合成して吐く
-		const mergedPressed: Partial<WiiState["buttons"]> = {
-			...pressedBufferRef.current,
-			...kbPressedBufferRef.current,
-		};
+		// ★修正: 新しく押されたボタンを累積バッファに追加
+		for (const key of Object.keys(pressedBufferRef.current)) {
+			pendingPressedRef.current[key as keyof WiiState["buttons"]] = true;
+		}
+		for (const key of Object.keys(kbPressedBufferRef.current)) {
+			pendingPressedRef.current[key as keyof WiiState["buttons"]] = true;
+		}
 		pressedBufferRef.current = {};
 		kbPressedBufferRef.current = {};
+
+		// ★修正: 累積バッファから現在のpressedを取得し、バッファをクリア
+		const mergedPressed: Partial<WiiState["buttons"]> = { ...pendingPressedRef.current };
+		pendingPressedRef.current = {};
+
+		// ★デバッグ: 押されたボタンがあればログ出力
+		const pressedKeys = Object.keys(mergedPressed).filter(k => (mergedPressed as Record<string, boolean>)[k]);
+		if (pressedKeys.length > 0) {
+			console.log(`[flushState] Pressed buttons: ${pressedKeys.join(', ')}`);
+		}
 
 		// accel/ir は Wii が無ければダミー
 		const mergedState: WiiState = {

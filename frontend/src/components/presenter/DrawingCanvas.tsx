@@ -144,31 +144,19 @@ export function DrawingCanvas(props: DrawingCanvasProps) {
 
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-		// 消しゴムカーソル表示（eraserModeがtrueの時）
+		// 消しゴムモード時：消しゴム範囲を表示
 		if (eraserMode && eraserPosition) {
 			ctx.save();
-			ctx.strokeStyle = "rgba(255, 100, 100, 0.8)";
+			ctx.strokeStyle = "rgba(255, 100, 100, 0.6)";
 			ctx.lineWidth = 2;
-			ctx.setLineDash([5, 5]);
+			ctx.setLineDash([8, 4]);
 			ctx.beginPath();
 			ctx.arc(eraserPosition.x, eraserPosition.y, 60, 0, Math.PI * 2);
 			ctx.stroke();
 			ctx.setLineDash([]);
 			ctx.restore();
 		}
-
-		// IRポインター処理
-		if (wiiState && wiiState.ir.length > 0) {
-			const dot = wiiState.ir[0];
-			const pos = mapIrToScreen(dot.x, dot.y, window.innerWidth, window.innerHeight);
-
-			// カーソル描画
-			ctx.fillStyle = "blue";
-			ctx.beginPath();
-			ctx.arc(pos.x, pos.y, 10, 0, Math.PI * 2);
-			ctx.fill();
-		}
-	}, [wiiState, eraserMode, eraserPosition]);
+	}, [eraserMode, eraserPosition]);
 
 	return (
 		<>

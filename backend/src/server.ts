@@ -22,6 +22,14 @@ function sleep(ms: number): Promise<void> {
     return new Promise((res) => setTimeout(res, ms));
 }
 
+async function setReportMode37(device: HID.HID): Promise<void> {
+    // 0x12: Set Data Reporting Mode
+    // 2nd byte: bit2(0x04)=continuous reporting
+    // 3rd byte: 0x37 (Core + Accel + IR(10bytes) + Extension(6bytes))
+    device.write([0x12, 0x04, 0x37]);
+    await sleep(50);
+}
+
 /**
  * Output Report 0x16: Write Memory and Registers
  * (a2) 16 MM AA AA AA SS DD... (DD padded to 16 bytes)
@@ -90,8 +98,8 @@ async function initIR(device: HID.HID): Promise<void> {
 }
 
 
-// IR→カーソル制御の有効/無効フラグ（デフォルトで有効）
-let irCursorEnabled = true;
+// IR→カーソル制御の有効/無効フラグ（デフォルトで無効 - フロントのIRオーバーレイを使用）
+let irCursorEnabled = false;
 
 // ========================================
 // カーソルスムージング用
@@ -212,11 +220,14 @@ async function connectWiiRemote() {
         console.log("Initializing sensors (IR + Accel)...");
 
         // レポートモード0x37（Coreボタン + Accel + IR(10bytes) + Extension(6bytes)）に設定
-        device.write([0x12, 0x00, 0x37]);
-        await sleep(50);
+        // ★重要: continuous(0x04) を立てて、ボタン押下でも確実にレポートが来るようにする
+        await setReportMode37(device);
 
         // IRカメラの初期化（WiiBrew仕様準拠）
         await initIR(device);
+
+        // IR初期化後にも念のため再設定（状態変化でモードが戻るケースの保険）
+        await setReportMode37(device);
 
         console.log("Initialization complete.");
         setWiiConnected(true);
@@ -242,6 +253,8 @@ async function connectWiiRemote() {
     // 4. データ受信処理
     let lastIrLogTime = 0;
     let reportCount = { 0x20: 0, 0x37: 0, other: 0 };
+    let lastReportModeResendAt = 0;
+    let lastCursorUpdateTime = 0; // ★追加: カーソル更新のスロットリング用
 
     device.on('data', (data: Buffer) => {
         if (data.length < 3) return;
@@ -266,8 +279,17 @@ async function connectWiiRemote() {
                 `(counts: 0x20=${reportCount[0x20]}, 0x37=${reportCount[0x37]})`
             );
 
-            // ★切り分けのため、ここでは 0x37 を再送しない
-            // （0x15 keepAlive の応答で 0x20 が定期的に来るので、毎回再送すると状況が見えにくい）
+            // ★仕様上は 0x20 受信後に 0x12 を再送した方が堅牢。
+            // ただし 0x20 は keepAlive で定期的に来るので、1秒に1回までに制限して再送する。
+            const nowMs = Date.now();
+            if (nowMs - lastReportModeResendAt > 1000) {
+                lastReportModeResendAt = nowMs;
+                try {
+                    device?.write([0x12, 0x04, 0x37]);
+                } catch (e) {
+                    console.error("Failed to re-send report mode 0x37:", e);
+                }
+            }
             return;
         }
 
@@ -295,19 +317,35 @@ async function connectWiiRemote() {
             Home: (b2 & 0x80) !== 0,
         };
 
+        // accel はひとまず 8bit をそのまま採用（確実に変化が取れる）
+        // MotionPlus(いわゆる"ジャイロ")は Extension 初期化/解析が別途必要
         const accel = {
             x: data[3] ?? 0,
             y: data[4] ?? 0,
-            z: data[5] ?? 0
+            z: data[5] ?? 0,
         };
 
         // === IR解析（0x37 Basic Mode: 10bytes で最大4点） ===
         const irDots = parseIR_0x37(data);
 
+        // ★デバッグ: ボタン押下をログ出力
+        const pressedButtons = Object.entries(buttons)
+            .filter(([_, v]) => v)
+            .map(([k]) => k);
+        if (pressedButtons.length > 0) {
+            console.log(`[BTN] ${pressedButtons.join(', ')}`);
+        }
+
         // ★デバッグ: IRデータをログ出力（500ms間隔）
         const now = Date.now();
         if (now - lastIrLogTime > 500) {
             lastIrLogTime = now;
+
+            // 0x37 の先頭をダンプ（ボタンバイト位置の切り分け用）
+            // 期待: [37 b1 b2 ax ay az ...]
+            console.log(`[0x37 HEX] ${[...data.slice(0, 18)].map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+            console.log(`[RAW BTN] b1=0x${b1.toString(16).padStart(2, '0')} b2=0x${b2.toString(16).padStart(2, '0')}`);
+
             if (irDots.length > 0) {
                 const irStr = irDots.map((p, i) => `IR${i + 1}:(${p.x},${p.y})`).join(' ');
                 console.log(`[IR] ${irDots.length} points detected: ${irStr}`);
@@ -341,17 +379,23 @@ async function connectWiiRemote() {
             cursor = lastCursor;
         }
 
-        // === PCカーソル移動（有効時のみ） ===
+        // === PCカーソル移動（有効時のみ、16msにスロットリング） ===
         if (irCursorEnabled && cursor) {
-            // 画面座標に変換
-            const screenX = Math.round(cursor.x * screenWidth);
-            const screenY = Math.round(cursor.y * screenHeight);
-            
-            // 画面範囲内にクランプ
-            const clampedX = Math.max(0, Math.min(screenWidth - 1, screenX));
-            const clampedY = Math.max(0, Math.min(screenHeight - 1, screenY));
-            
-            SetCursorPos(clampedX, clampedY);
+            const nowForCursor = Date.now();
+            // 60fps相当（16ms）でカーソル更新を制限して、イベント処理をブロックしない
+            if (nowForCursor - lastCursorUpdateTime >= 16) {
+                lastCursorUpdateTime = nowForCursor;
+                
+                // 画面座標に変換
+                const screenX = Math.round(cursor.x * screenWidth);
+                const screenY = Math.round(cursor.y * screenHeight);
+                
+                // 画面範囲内にクランプ
+                const clampedX = Math.max(0, Math.min(screenWidth - 1, screenX));
+                const clampedY = Math.max(0, Math.min(screenHeight - 1, screenY));
+                
+                SetCursorPos(clampedX, clampedY);
+            }
         }
 
         // === フロントへ送るデータ ===
@@ -485,9 +529,24 @@ function calcCursorFromIR(ir: { x: number; y: number }[]): { x: number; y: numbe
 }
 
 function normalizeCursor(pos: { x: number; y: number }): { x: number; y: number } {
+    // IRカメラ座標系: X=0-1023, Y=0-767
+    // 画面座標系: 左上が(0,0)
+    // Wiiリモコンを画面に向けた時:
+    //   - IRのXは右が大きい → 画面では左右反転が必要
+    //   - IRのYは下が大きい → 画面もそのままでOK（ただし上に行きにくい場合は調整）
+    
+    // Y座標のマージンを調整（センサーバーが画面下にある場合）
+    // 有効範囲を少し狭めて、上下の端にも届きやすくする
+    const xNorm = 1.0 - pos.x / 1024; // 左右反転
+    const yNorm = pos.y / 768;
+    
+    // Y座標の有効範囲を調整（上に行きやすくする）
+    // センサーバーの位置に応じて調整可能
+    const yAdjusted = (yNorm - 0.1) / 0.8; // 10%-90%の範囲を0-1にマップ
+    
     return {
-        x: 1.0 - pos.x / 1024, // 左右反転（重要）
-        y: pos.y / 768
+        x: Math.max(0, Math.min(1, xNorm)),
+        y: Math.max(0, Math.min(1, yAdjusted)),
     };
 }
 

@@ -38,9 +38,14 @@ export function subscribeCurrentFlow(listener: Listener) {
 
 export function getProjectBindings(): ButtonBindings | undefined {
     // ★修正: currentFlowに無くても localStorage から読めるようにする
-    if (currentFlow?.projectBindings) return currentFlow.projectBindings;
+    if (currentFlow?.projectBindings) {
+        console.log("[Bindings] Loaded from currentFlow:", currentFlow.projectBindings);
+        return currentFlow.projectBindings;
+    }
     if (typeof window === "undefined") return undefined;
-    return loadProjectBindings(currentProjectId);
+    const stored = loadProjectBindings(currentProjectId);
+    console.log(`[Bindings] Loaded from localStorage (projectId: ${currentProjectId}):`, stored);
+    return stored;
 }
 
 export function setProjectBindings(bindings: ButtonBindings) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { WiiState } from "@/hooks/useWiiController";
 
 interface IrPointerOverlayProps {
@@ -20,6 +20,21 @@ function mapIrToScreen(irX: number, irY: number, screenW: number, screenH: numbe
 export function IrPointerOverlay(props: IrPointerOverlayProps) {
 	const { wiiState, isPlaying } = props;
 	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const cursorImgRef = useRef<HTMLImageElement | null>(null);
+	const [cursorLoaded, setCursorLoaded] = useState(false);
+
+	// カーソル画像をロード
+	useEffect(() => {
+		const img = new Image();
+		img.src = "/cursor.png";
+		img.onload = () => {
+			cursorImgRef.current = img;
+			setCursorLoaded(true);
+		};
+		img.onerror = () => {
+			console.error("Failed to load cursor.png");
+		};
+	}, []);
 
 	useEffect(() => {
 		const canvas = canvasRef.current;
@@ -37,43 +52,40 @@ export function IrPointerOverlay(props: IrPointerOverlayProps) {
 
 		if (!wiiState || !wiiState.ir || wiiState.ir.length === 0) return;
 
-		// IRポインター描画（複数の点に対応）
-		wiiState.ir.forEach((dot, index) => {
-			const pos = mapIrToScreen(dot.x, dot.y, window.innerWidth, window.innerHeight);
+		// カーソル画像が読み込まれていない場合はフォールバック表示
+		if (!cursorLoaded || !cursorImgRef.current) {
+			// フォールバック: シンプルな円で表示
+			wiiState.ir.forEach((dot) => {
+				const pos = mapIrToScreen(dot.x, dot.y, window.innerWidth, window.innerHeight);
+				
+				ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+				ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
+				ctx.lineWidth = 2;
+				ctx.beginPath();
+				ctx.arc(pos.x, pos.y, 8, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.stroke();
+			});
+			return;
+		}
 
-			// カーソル描画（グラデーション付き）
-			const gradient = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 15);
-			gradient.addColorStop(0, "rgba(0, 150, 255, 0.9)");
-			gradient.addColorStop(0.7, "rgba(0, 100, 255, 0.5)");
-			gradient.addColorStop(1, "rgba(0, 50, 255, 0.1)");
-
-			ctx.fillStyle = gradient;
-			ctx.beginPath();
-			ctx.arc(pos.x, pos.y, 15, 0, Math.PI * 2);
-			ctx.fill();
-
-			// 中心点
-			ctx.fillStyle = "white";
-			ctx.beginPath();
-			ctx.arc(pos.x, pos.y, 3, 0, Math.PI * 2);
-			ctx.fill();
-
-			// 十字線
-			ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
-			ctx.lineWidth = 1;
-			ctx.beginPath();
-			ctx.moveTo(pos.x - 20, pos.y);
-			ctx.lineTo(pos.x + 20, pos.y);
-			ctx.moveTo(pos.x, pos.y - 20);
-			ctx.lineTo(pos.x, pos.y + 20);
-			ctx.stroke();
-
-			// ラベル表示
-			ctx.fillStyle = "white";
-			ctx.font = "12px monospace";
-			ctx.fillText(`IR${index + 1}`, pos.x + 18, pos.y - 8);
-		});
-	}, [wiiState, isPlaying]);
+		// カーソル画像で表示（最初のIRポイントのみ使用）
+		const dot = wiiState.ir[0];
+		const pos = mapIrToScreen(dot.x, dot.y, window.innerWidth, window.innerHeight);
+		
+		const cursorImg = cursorImgRef.current;
+		const cursorWidth = 40; // 画像の表示サイズ
+		const cursorHeight = 40;
+		
+		// カーソル画像の中心が座標位置に来るように描画
+		ctx.drawImage(
+			cursorImg,
+			pos.x - cursorWidth / 2,
+			pos.y - cursorHeight / 2,
+			cursorWidth,
+			cursorHeight
+		);
+	}, [wiiState, isPlaying, cursorLoaded]);
 
 	return (
 		<>
