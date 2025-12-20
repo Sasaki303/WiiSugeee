@@ -20,6 +20,7 @@ export function ReactionOverlay(props: {
 }) {
     const { emitClap, emitLaugh } = props;
     const [items, setItems] = useState<Reaction[]>([]);
+    const [scale, setScale] = useState(1);
 
     const add = (type: ReactionType) => {
         const now = Date.now();
@@ -35,6 +36,19 @@ export function ReactionOverlay(props: {
         };
         setItems((prev) => [...prev, r]);
     };
+
+    // 画面サイズに合わせてスケールを計算（最小辺基準）
+    useEffect(() => {
+        const calc = () => {
+            const min = Math.min(window.innerWidth, window.innerHeight);
+            // 基準サイズ800pxを1.0とし、0.6〜2.0でクランプ
+            const s = Math.max(0.6, Math.min(2, min / 800));
+            setScale(s);
+        };
+        calc();
+        window.addEventListener("resize", calc);
+        return () => window.removeEventListener("resize", calc);
+    }, []);
 
     // 「そのフレームだけ true」が来る前提（pressed.* をそのまま渡せばOK）
     useEffect(() => {
@@ -68,6 +82,8 @@ export function ReactionOverlay(props: {
                 pointerEvents: "none",
                 overflow: "hidden",
                 zIndex: 10001, // スライドより前、戻るボタンと同等より少し上
+                transform: `scale(${scale})`,
+                transformOrigin: "right bottom",
             }}
         >
             {items.map((r) => (
