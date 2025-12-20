@@ -15,8 +15,6 @@ import { SlideDisplay } from "@/components/presenter/SlideDisplay";
 import { DrawingCanvas } from "@/components/presenter/DrawingCanvas";
 import { IrPointerOverlay } from "@/components/presenter/IrPointerOverlay";
 import { EraserCursor } from "@/components/presenter/EraserCursor";
-import { WiiReconnectPopup2 } from "./WiiReconnectPopup2";
-import { WiiDisconnectPopup2 } from "./WiiDisconnectPopup2";
 
 export function PresenterView() {
     const router = useRouter();
@@ -870,8 +868,8 @@ export function PresenterView() {
                 background: "black",
             }}
         >
-            {/*ここから*/}
-            {/* <WiiDisconnectPopup
+
+            <WiiDisconnectPopup
                 isPlaying={isPlaying}
                 startedWithWii={startedWithWii}
                 wiiConnected={wiiConnected}
@@ -883,23 +881,7 @@ export function PresenterView() {
                 isPlaying={isPlaying}
                 wiiConnected={wiiConnected}
                 startedWithWii={startedWithWii}
-            /> */}
-            {/*ここ残す*/}
-            {/*ここから*/}
-            <WiiDisconnectPopup2
-                isPlaying={isPlaying}
-                startedWithWii={startedWithWii}
-                wiiConnected={wiiConnected}
-                wiiDisconnectedAt={wiiDisconnectedAt}
-                playingSince={playingSince}
             />
-
-            <WiiReconnectPopup2
-                isPlaying={isPlaying}
-                wiiConnected={wiiConnected}
-                startedWithWii={startedWithWii}
-            />
-            {/*ここけす*/}
 
             {/* 戻るボタン（左上） */}
             <div style={{ position: "absolute", top: 20, left: 20, zIndex: 10000 }}>

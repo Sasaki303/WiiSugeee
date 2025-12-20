@@ -57,22 +57,54 @@ export function WiiReconnectPopup({ isPlaying, wiiConnected, startedWithWii }: P
                 top: 80,
                 right: 20,
                 zIndex: 30000,
-                width: "min(400px, 90vw)",
-                borderRadius: 14,
-                background: "#FFFFFF",
-                border: "3px solid #87CEEB",
-                boxShadow: "0 10px 40px rgba(135, 206, 235, 0.4)",
-                padding: 20,
-                color: "#87CEEB",
-                textAlign: "center",
-                animation: "slideInRight 0.3s ease-out",
+                // ここはスケール対象の外枠（位置決めのみ）
+                width: "auto",
+                pointerEvents: "none",
             }}
         >
-            <div style={{ fontSize: 24, fontWeight: 400, marginBottom: 8, fontFamily: "Doto, sans-serif" }}>
-                Wii-Remote Conected!
-            </div>
-            <div style={{ fontSize: 14, opacity: 0.8, lineHeight: 1.5, color: "#000000" }}>
-                操作を再開できます
+            {/* アニメーション用ラッパー（translate/opacity のみ） */}
+            <div
+                style={{
+                    display: "inline-block",
+                    transformOrigin: "top right",
+                    pointerEvents: "auto",
+                    // 幅は内側で決める
+                }}
+            >
+                {/* この要素でスライドインアニメを行う（transform は translateX のみを使用） */}
+                <div
+                    style={{
+                        display: "inline-block",
+                        animation: "slideInRight 0.3s ease-out",
+                        transformOrigin: "top right",
+                    }}
+                >
+                    {/* 全体を比率そのままに拡大するラッパー（枠含めこれをスケール）小さくしたかったらtransform:"scale(1.2)"とかにして */}
+                    <div
+                        style={{
+                            display: "inline-block",
+                            transform: "scale(1)",
+                            transformOrigin: "top right",
+
+                            // 以下がもともと外側にあったビジュアルスタイル
+                            borderRadius: 14,
+                            background: "#FFFFFF",
+                            border: "3px solid #87CEEB",
+                            boxShadow: "0 10px 40px rgba(135, 206, 235, 0.4)",
+                            padding: 20,
+                            color: "#87CEEB",
+                            textAlign: "center",
+                            width: "min(400px, 90vw)",
+                        }}
+                    >
+                        <div style={{ fontSize: 24, fontWeight: 400, marginBottom: 8, fontFamily: "Doto, sans-serif" }}>
+                            Wii-Remote Conected!
+                        </div>
+                        <div style={{ fontSize: 14, opacity: 0.8, lineHeight: 1.5, color: "#000000" }}>
+                            操作を再開できます
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <style jsx>{`
