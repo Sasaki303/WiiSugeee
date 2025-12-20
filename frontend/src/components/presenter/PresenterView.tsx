@@ -542,8 +542,11 @@ export function PresenterView() {
 
         const dot = wiiState.ir[0];
         // IRカメラの座標(0-1023)を画面座標に変換
-        const x = (1 - dot.x / 1024) * window.innerWidth;
-        const y = (dot.y / 768) * window.innerHeight;
+        // cursor-original.pngの指先位置に合わせてオフセットを適用
+        const baseX = (1 - dot.x / 1024) * window.innerWidth;
+        const baseY = (dot.y / 768) * window.innerHeight;
+        const x = baseX - 2; // 指先のX位置（画像左端から少し右）
+        const y = baseY - 2; // 指先のY位置（画像上端から少し下）
         const pos = { x, y };
 
         // 消しゴムモード中: IRでカーソルを移動

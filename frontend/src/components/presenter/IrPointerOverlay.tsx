@@ -26,13 +26,13 @@ export function IrPointerOverlay(props: IrPointerOverlayProps) {
 	// カーソル画像をロード
 	useEffect(() => {
 		const img = new Image();
-		img.src = "/cursor.png";
+		img.src = "/cursor-original.png";
 		img.onload = () => {
 			cursorImgRef.current = img;
 			setCursorLoaded(true);
 		};
 		img.onerror = () => {
-			console.error("Failed to load cursor.png");
+			console.error("Failed to load cursor-original.png");
 		};
 	}, []);
 
@@ -74,14 +74,15 @@ export function IrPointerOverlay(props: IrPointerOverlayProps) {
 		const pos = mapIrToScreen(dot.x, dot.y, window.innerWidth, window.innerHeight);
 		
 		const cursorImg = cursorImgRef.current;
-		const cursorWidth = 40; // 画像の表示サイズ
-		const cursorHeight = 40;
+		const cursorWidth = 50; // 画像の表示サイズ
+		const cursorHeight = 50;
 		
-		// カーソル画像の中心が座標位置に来るように描画
+		// 指先位置（左上）が座標位置に来るように描画
+		// cursor-original.pngは指が左上を向いているため、オフセットを調整
 		ctx.drawImage(
 			cursorImg,
-			pos.x - cursorWidth / 2,
-			pos.y - cursorHeight / 2,
+			pos.x - 2, // 指先のX位置（画像左端から少し右）
+			pos.y - 2, // 指先のY位置（画像上端から少し下）
 			cursorWidth,
 			cursorHeight
 		);
