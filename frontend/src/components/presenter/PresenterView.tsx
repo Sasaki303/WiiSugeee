@@ -14,6 +14,7 @@ import { WiiReconnectPopup } from "@/components/presenter/WiiReconnectPopup";
 import { SlideDisplay } from "@/components/presenter/SlideDisplay";
 import { DrawingCanvas } from "@/components/presenter/DrawingCanvas";
 import { IrPointerOverlay } from "@/components/presenter/IrPointerOverlay";
+import { EraserCursor } from "@/components/presenter/EraserCursor";
 
 export function PresenterView() {
     const router = useRouter();
@@ -796,14 +797,19 @@ export function PresenterView() {
             onMouseMove={(e) => {
                 if (!isPlaying) return;
                 
-                // 消しゴムモード時：マウスでの消去（IRセンサーがない場合のフォールバック）
-                if (eraserMode && isMouseDrawingRef.current) {
-                    e.preventDefault();
-                    setDrawingPoints((prev) => {
-                        const last = prev[prev.length - 1];
-                        if (last && last.x && Math.abs(last.x - e.clientX) + Math.abs(last.y - e.clientY) < 2) return prev;
-                        return [...prev, { x: e.clientX, y: e.clientY, mode: "erase" }];
-                    });
+                // 消しゴムモード時：カーソル位置を常に更新（赤い円を追従させる）
+                if (eraserMode) {
+                    setCursorPos({ x: e.clientX, y: e.clientY });
+                    
+                    // マウスドラッグ中のみ消去を実行
+                    if (isMouseDrawingRef.current) {
+                        e.preventDefault();
+                        setDrawingPoints((prev) => {
+                            const last = prev[prev.length - 1];
+                            if (last && last.x && Math.abs(last.x - e.clientX) + Math.abs(last.y - e.clientY) < 2) return prev;
+                            return [...prev, { x: e.clientX, y: e.clientY, mode: "erase" }];
+                        });
+                    }
                     return;
                 }
                 
@@ -927,28 +933,12 @@ export function PresenterView() {
                 [ESC] 戻る | [SPACE] デバッグ表示切替
             </div>
 
-            {/* 消しゴムモード表示 */}
-            {eraserMode && (
-                <div
-                    style={{
-                        position: "absolute",
-                        bottom: 80,
-                        right: 20,
-                        background: "rgba(255, 100, 100, 0.7)",
-                        color: "white",
-                        padding: "8px 16px",
-                        borderRadius: 6,
-                        fontSize: 13,
-                        fontWeight: "normal",
-                        zIndex: 9999,
-                        boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
-                        pointerEvents: "none",
-                    }}
-                >
-                    消しゴムモード ON<br/>
-                    <small style={{ fontSize: 11 }}>左クリックまたはA+Bで消去 | {eraserButtonName}で解除</small>
-                </div>
-            )}
+            {/* 消しゴムカーソル */}
+            <EraserCursor 
+                position={cursorPos}
+                isActive={eraserMode}
+                buttonName={eraserButtonName}
+            />
             
             {/* 消しゴムカーソル */}
             {eraserMode && cursorPos && (
