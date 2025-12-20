@@ -8,7 +8,7 @@ import { useWiiController } from "@/hooks/useWiiController";
 import { ReactionOverlay } from "@/components/presenter/ReactionOverlay";
 import { WiiDebugPanel } from "@/components/presenter/WiiDebugPanel";
 import { mergeBindings, type BindingAction } from "@/lib/buttonBindings";
-import { getProjectBindings } from "@/lib/currentProjectStore";
+import { getProjectBindings, getSoundSettings } from "@/lib/currentProjectStore";
 import { WiiDisconnectPopup } from "@/components/presenter/WiiDisconnectPopup";
 import { WiiReconnectPopup } from "@/components/presenter/WiiReconnectPopup";
 import { SlideDisplay } from "@/components/presenter/SlideDisplay";
@@ -23,7 +23,12 @@ export function PresenterView() {
     const wasWiiADownRef = useRef(false);
 
     // Wiiリモコンの状態を取得
-	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt} = useWiiController();
+	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt, playWiiSound} = useWiiController();
+	
+	// ★追加: 音声出力デバイス設定を取得
+	const soundOutputDevice = useMemo(() => {
+		return getSoundSettings().outputDevice;
+	}, []);
 
     const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
     const playSound = useCallback((key: "q" | "w" | "e") => {
@@ -306,15 +311,27 @@ export function PresenterView() {
 			
 			if (!e.repeat) {
 				if (e.key === "q" || e.key === "Q") {
-					playSound("q");
+					if (soundOutputDevice === "wii") {
+						playWiiSound("shot");
+					} else {
+						playSound("q");
+					}
 					return;
 				}
 				if (e.key === "w" || e.key === "W") {
-					playSound("w");
+					if (soundOutputDevice === "wii") {
+						playWiiSound("uxo");
+					} else {
+						playSound("w");
+					}
 					return;
 				}
 				if (e.key === "e" || e.key === "E") {
-					playSound("e");
+					if (soundOutputDevice === "wii") {
+						playWiiSound("oh");
+					} else {
+						playSound("e");
+					}
 					return;
 				}
 			}
@@ -349,7 +366,7 @@ export function PresenterView() {
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isPlaying, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches, playSound]);
+    }, [isPlaying, nextSlide, prevSlide, goBack, branchByNumberKey, hasMultipleBranches, playSound, playWiiSound, soundOutputDevice]);
 
     const effectiveProjectBindings = useMemo(() => {
         const merged = mergeBindings(flow?.projectBindings);
@@ -410,9 +427,17 @@ export function PresenterView() {
 					break;
 				case "sound":
 					// 音声再生処理
-				if (act.kind === "shot") playSound("q");
-				else if (act.kind === "oh") playSound("e");
-				else if (act.kind === "uxo") playSound("w");
+					if (soundOutputDevice === "wii") {
+						// Wiiリモコンから音を出す
+						if (act.kind === "shot") playWiiSound("shot");
+						else if (act.kind === "oh") playWiiSound("oh");
+						else if (act.kind === "uxo") playWiiSound("uxo");
+					} else {
+						// PCから音を出す
+						if (act.kind === "shot") playSound("q");
+						else if (act.kind === "oh") playSound("e");
+						else if (act.kind === "uxo") playSound("w");
+					}
 					return;
 				case "remove":
 					// 描画を消去
@@ -425,7 +450,7 @@ export function PresenterView() {
 					return;
             }
         },
-        [nextSlide, prevSlide, branchByNumberKey, hasMultipleBranches, playSound, eraserMode],
+        [nextSlide, prevSlide, branchByNumberKey, hasMultipleBranches, playSound, playWiiSound, soundOutputDevice, eraserMode],
     );
 
     // ★修正: Wiiリモコンのボタン処理（isPlayingがtrueの時のみ動作）

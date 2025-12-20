@@ -16,6 +16,17 @@ export type BindingAction =
 
 export type ButtonBindings = Partial<Record<WiiButton, BindingAction>>;
 
+// 音声出力デバイスの設定
+export type SoundOutputDevice = "pc" | "wii";
+
+export interface SoundSettings {
+	outputDevice: SoundOutputDevice;
+}
+
+export const DEFAULT_SOUND_SETTINGS: SoundSettings = {
+	outputDevice: "pc",
+};
+
 export const DEFAULT_BINDINGS: ButtonBindings = {
 	Right: { type: "next" },
 	Left: { type: "prev" },
