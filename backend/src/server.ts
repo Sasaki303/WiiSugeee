@@ -204,27 +204,23 @@ function playSoundOnWiiInternal(soundType: 'shot' | 'oh' | 'uxo') {
 
         console.log(`Audio data size: ${audioData.length} bytes`);
 
-        // ★先頭無音（入れるなら1パケット分で十分なことが多い）
-        const silence = Buffer.alloc(20, 0);
-        const dataToSend = Buffer.concat([silence, audioData]);
-
-        // ★ここから送信ループ（1 tick = 1 packet）
+        // ★パケット送信ループ
         isPlayingAudio = true;
 
         const chunkSize = 20;
         const sampleRate = 2000;
-        // Wiiリモコンの実際のバッファ処理速度に合わせた送信間隔
-        // 理論値10msでは速すぎるため、15msに設定
-        const chunkMs = 15;
+        // バッファアンダーフロー防止のため、理論値に近い間隔で送信
+        const chunkMs = 8; // 理論10msだが、若干速めに送ってバッファを維持
 
-        const totalChunks = Math.ceil(dataToSend.length / chunkSize);
+        const totalChunks = Math.ceil(audioData.length / chunkSize);
         let chunkIndex = 0;
 
+        // レポートID 0x18、サイズフィールド（20バイトを示す）
         const packet: number[] = new Array(22).fill(0);
-        packet[0] = 0x18;
-        packet[1] = 0xA0;
+        packet[0] = 0x18; // スピーカーデータレポート
+        packet[1] = (chunkSize << 3); // サイズフィールド: 20 << 3 = 0xA0
 
-        console.log(`Starting playback: ${totalChunks} chunks, ${chunkMs}ms interval, Duration: ${(totalChunks * chunkMs).toFixed(0)}ms`);
+        console.log(`Starting playback: ${totalChunks} chunks, ${chunkMs}ms interval, theoretical duration: ${(totalChunks * chunkSize / sampleRate * 1000).toFixed(0)}ms`);
 
         const tick = () => {
             if (!currentDevice) {
@@ -243,7 +239,7 @@ function playSoundOnWiiInternal(soundType: 'shot' | 'oh' | 'uxo') {
 
             // 20バイト詰める（足りない分は0でパディング）
             for (let i = 0; i < chunkSize; i++) {
-                packet[2 + i] = dataToSend[offset + i] ?? 0;
+                packet[2 + i] = audioData[offset + i] ?? 0;
             }
 
             const dev = currentDevice;
