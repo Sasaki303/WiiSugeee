@@ -9,9 +9,11 @@ type WiiDebugPanelProps = {
 	wiiState: WiiState | null;
 	pressed: Record<string, boolean>;
 	effectiveProjectBindings: ButtonBindings;
+	irCursorEnabled?: boolean;
+	onToggleIrCursor?: () => void;
 };
 
-export function WiiDebugPanel({ wiiState, pressed, effectiveProjectBindings }: WiiDebugPanelProps) {
+export function WiiDebugPanel({ wiiState, pressed, effectiveProjectBindings, irCursorEnabled, onToggleIrCursor }: WiiDebugPanelProps) {
 	// 表示用の値を保持
 	const [displayAccel, setDisplayAccel] = useState({ x: 0, y: 0, z: 0 });
 	const displayIrCountRef = useRef(0);
@@ -112,7 +114,7 @@ export function WiiDebugPanel({ wiiState, pressed, effectiveProjectBindings }: W
 				fontFamily:
 					"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
 				zIndex: 9999,
-				pointerEvents: "none",
+				pointerEvents: "auto",
 				minWidth: 360,
 				whiteSpace: "pre",
 				lineHeight: 1.35,
@@ -127,6 +129,29 @@ export function WiiDebugPanel({ wiiState, pressed, effectiveProjectBindings }: W
 			</div>
 			<div style={{ color: "rgba(209,250,229,0.9)" }}>IR : {displayIrCountRef.current}</div>
 			<div style={{ color: "rgba(209,250,229,0.9)" }}>{`Btn: ${displayButtonsRef.current}`}</div>
+			
+			{/* IRカーソル制御トグル */}
+			{onToggleIrCursor && (
+				<div style={{ marginTop: 8 }}>
+					<button
+						onClick={onToggleIrCursor}
+						style={{
+							background: irCursorEnabled ? "#10b981" : "#374151",
+							color: "#fff",
+							border: "none",
+							borderRadius: 6,
+							padding: "6px 12px",
+							cursor: "pointer",
+							fontWeight: 700,
+							fontSize: 12,
+							width: "100%",
+						}}
+					>
+						{irCursorEnabled ? "🎯 IR Cursor: ON" : "IR Cursor: OFF"}
+					</button>
+				</div>
+			)}
+			
 			<div style={{ margin: "10px 0", borderTop: "1px solid rgba(255,255,255,0.12)" }} />
 			<div style={{ fontWeight: 800, color: "#a7f3d0", marginBottom: 6 }}>Bindings (project)</div>
 			{displayBindingsRef.current.map((line) => (

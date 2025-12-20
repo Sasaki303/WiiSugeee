@@ -90,6 +90,10 @@ export function useWiiController() {
 
 	// ★追加: 「一度でも正常に接続できていたか」を保持（接続失敗の誤爆防止）
 	const wasConnectedRef = useRef(false);
+	
+	// ★追加: IRカーソル制御の有効/無効
+	const [irCursorEnabled, setIrCursorEnabled] = useState(false);
+	const wsRef = useRef<WebSocket | null>(null);
 
 	// 「このフレームで押された」情報（Wii + キーボード合成）
 	const [pressed, setPressed] = useState<Partial<WiiState["buttons"]>>({});
@@ -135,6 +139,7 @@ export function useWiiController() {
 	// WebSocket (Wii)
 	useEffect(() => {
 		const ws = new WebSocket("ws://localhost:8080");
+		wsRef.current = ws;
 
 		ws.onopen = () => {
 			console.log("Connected to Wii Server");
@@ -151,6 +156,15 @@ export function useWiiController() {
 						const connected = !!(msg as any).connected;
 						setWiiConnected(connected);
 						wasConnectedRef.current = connected; // ★追加
+						// IRカーソル状態も受信
+						if (typeof (msg as any).irCursorEnabled === "boolean") {
+							setIrCursorEnabled((msg as any).irCursorEnabled);
+						}
+						return;
+					}
+
+					if (t === "irCursorStatus") {
+						setIrCursorEnabled(!!(msg as any).enabled);
 						return;
 					}
 
@@ -277,5 +291,11 @@ export function useWiiController() {
 		pressed,
 		wiiConnected,
 		wiiDisconnectedAt,
+		irCursorEnabled,
+		setIrCursorEnabled: (enabled: boolean) => {
+			if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+				wsRef.current.send(JSON.stringify({ type: "setIrCursor", enabled }));
+			}
+		},
 	};
 }

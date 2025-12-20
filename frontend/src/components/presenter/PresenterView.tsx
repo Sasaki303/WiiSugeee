@@ -24,7 +24,7 @@ export function PresenterView() {
     const wasWiiADownRef = useRef(false);
 
     // Wiiリモコンの状態を取得
-	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt} = useWiiController();
+	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt, irCursorEnabled, setIrCursorEnabled } = useWiiController();
 
     const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
     const playSound = useCallback((key: "q" | "w" | "e") => {
@@ -746,6 +746,8 @@ export function PresenterView() {
                     wiiState={wiiState}
                     pressed={pressed}
                     effectiveProjectBindings={effectiveProjectBindings}
+                    irCursorEnabled={irCursorEnabled}
+                    onToggleIrCursor={() => setIrCursorEnabled(!irCursorEnabled)}
                 />
             )}
 
