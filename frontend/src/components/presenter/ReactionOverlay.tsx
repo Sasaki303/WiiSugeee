@@ -20,7 +20,9 @@ export function ReactionOverlay(props: {
 }) {
     const { emitClap, emitLaugh } = props;
     const [items, setItems] = useState<Reaction[]>([]);
-    const [scale, setScale] = useState(1);
+
+    // ここを変更すると全体の大きさを固定で変えられます（例: 2.5 => 約2.5倍）
+    const SCALE = 2.0;
 
     const add = (type: ReactionType) => {
         const now = Date.now();
@@ -30,6 +32,7 @@ export function ReactionOverlay(props: {
             createdAt: now,
             // 右下の狭い範囲で少しだけ左右に散る（インスタのハートっぽさ）
             x: 0.65 + Math.random() * 0.3,
+            // 必要ならここのベース値(現在40)を変えると更に大きくできます
             size: 26 + Math.floor(Math.random() * 18),
             durationMs: 1200 + Math.floor(Math.random() * 700),
             rotateDeg: -10 + Math.random() * 20,
@@ -37,19 +40,7 @@ export function ReactionOverlay(props: {
         setItems((prev) => [...prev, r]);
     };
 
-    // 画面サイズに合わせてスケールを計算（最小辺基準）
-    useEffect(() => {
-        const calc = () => {
-            const min = Math.min(window.innerWidth, window.innerHeight);
-            // 基準サイズ800pxを1.0とし、0.6〜2.0でクランプ
-            const s = Math.max(0.6, Math.min(2, min / 800));
-            setScale(s);
-        };
-        calc();
-        window.addEventListener("resize", calc);
-        return () => window.removeEventListener("resize", calc);
-    }, []);
-
+    // （画面サイズ依存のスケール計算は除去して固定スケールを使う）
     // 「そのフレームだけ true」が来る前提（pressed.* をそのまま渡せばOK）
     useEffect(() => {
         if (emitClap) add("clap");
@@ -78,11 +69,12 @@ export function ReactionOverlay(props: {
                 right: 24,
                 bottom: 24,
                 width: 240,
-                height: 280,
+                // 高さを増やしてより上まで表示できるようにする
+                height: 420,
                 pointerEvents: "none",
                 overflow: "hidden",
                 zIndex: 10001, // スライドより前、戻るボタンと同等より少し上
-                transform: `scale(${scale})`,
+                transform: `scale(${SCALE})`,
                 transformOrigin: "right bottom",
             }}
         >
@@ -106,7 +98,7 @@ function ReactionItem({ r }: { r: Reaction }) {
                 transform: `translateX(-50%) rotate(${r.rotateDeg}deg)`,
                 willChange: "transform, opacity",
                 animation: `reaction-float ${r.durationMs}ms ease-out forwards`,
-                filter: "drop-shadow(0 8px 12px rgba(0,0,0,0.35))",
+                filter: "drop-shadow(0 8px 12px rgba(0,0,0,0.35))"  ,
                 userSelect: "none",
             }}
         >
@@ -123,7 +115,8 @@ function ReactionItem({ r }: { r: Reaction }) {
                     }
                     100% {
                         opacity: 0;
-                        transform: translateX(-50%) translateY(-170px) scale(1.08) rotate(${r.rotateDeg}deg);
+                        /* ここを大きくするとより上まで浮かせられます（現在 -420px） */
+                        transform: translateX(-50%) translateY(-420px) scale(1.08) rotate(${r.rotateDeg}deg);
                     }
                 }
             `}</style>
