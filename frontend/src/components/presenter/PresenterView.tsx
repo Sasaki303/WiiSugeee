@@ -27,103 +27,11 @@ export function PresenterView() {
     const isMouseDrawingRef = useRef(false);
     const [isPainting, setIsPainting] = useState(false);
     const wasWiiADownRef = useRef(false);
-    const lastEraserToggleTimeRef = useRef<number>(0); // 消しゴムトグルの多重入力防止
-    const lastIrSensToggleTimeRef = useRef<number>(0); // IRセンサートグルの多重入力防止
+    const lastEraserToggleTimeRef = useRef<number>(0);
+    const lastIrSensToggleTimeRef = useRef<number>(0);
 
-    // Wiiリモコンの状態を取得
     const { wiiState, pressed, wiiConnected, wiiDisconnectedAt, irCursorEnabled, setIrCursorEnabled, playWiiSound } = useWiiController();
-
-    // PC側の音声再生用（HTMLAudioElement）
-    const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
-    const audioUnlockedRef = useRef(false);
-    const pendingSoundRef = useRef<"q" | "w" | "e" | null>(null);
-
-    const tryUnlockAudio = useCallback(async () => {
-        if (audioUnlockedRef.current) return;
-
-        const { q, w, e } = soundboardRef.current;
-        const audios = [q, w, e].filter(Boolean) as HTMLAudioElement[];
-        if (audios.length === 0) return;
-
-        try {
-            const a = audios[0];
-            const prevMuted = a.muted;
-            const prevVolume = a.volume;
-            a.muted = true;
-            a.volume = 0;
-            await a.play();
-            a.pause();
-            a.currentTime = 0;
-            a.muted = prevMuted;
-            a.volume = prevVolume;
-            audioUnlockedRef.current = true;
-            console.log("[Audio] Successfully unlocked audio context");
-
-            const pending = pendingSoundRef.current;
-            pendingSoundRef.current = null;
-            if (pending) {
-                const next = soundboardRef.current[pending];
-                if (next) {
-                    next.currentTime = 0;
-                    void next.play().catch((err) => {
-                        console.warn("sound play failed", pending, err);
-                    });
-                }
-            }
-        } catch (err) {
-            console.warn("audio unlock failed", err);
-        }
-    }, []);
-
-    // PC側で音声を再生（HTMLAudio）
-    const playSoundOnPC = useCallback(async (key: "q" | "w" | "e") => {
-        const a = soundboardRef.current[key];
-        if (!a) {
-            console.warn(`[Audio] No audio element for key: ${key}`);
-            return;
-        }
-
-        // オーディオがアンロックされていない場合、アンロックを試行
-        if (!audioUnlockedRef.current) {
-            console.log(`[Audio] Attempting to unlock audio context for ${key}`);
-            pendingSoundRef.current = key;
-            await tryUnlockAudio();
-            // アンロックに失敗した場合はペンディングに保存済み
-            if (!audioUnlockedRef.current) {
-                console.warn("[Audio] Audio context not unlocked yet, sound will play after user interaction");
-                return;
-            }
-        }
-
-        console.log(`[Audio] Playing sound on PC: ${key}`);
-        a.currentTime = 0;
-        void a.play().catch((err) => {
-            console.warn(`[Audio] Sound play failed for ${key}:`, err);
-            pendingSoundRef.current = key;
-        });
-    }, [tryUnlockAudio]);
-
-    // Wiiリモコン側で音声を再生
-    const playSoundOnWii = useCallback(
-        (key: "q" | "w" | "e") => {
-            if (key === "q") playWiiSound("shot");
-            else if (key === "e") playWiiSound("oh");
-            else playWiiSound("uxo");
-        },
-        [playWiiSound],
-    );
-
-    // 汎用の音声再生関数（outputDeviceで出力先を指定）
-    const playSound = useCallback(
-        (key: "q" | "w" | "e", outputDevice: "pc" | "wii" = "pc") => {
-            if (outputDevice === "wii") {
-                playSoundOnWii(key);
-            } else {
-                playSoundOnPC(key);
-            }
-        },
-        [playSoundOnPC, playSoundOnWii],
-    );
+    const { playSound } = useAudio(playWiiSound);
 
     const returnTo = useMemo(() => {
         return searchParams.get("from") === "editor" ? "/editor" : "/";
@@ -142,50 +50,11 @@ export function PresenterView() {
     const [startedWithWii, setStartedWithWii] = useState(false);
     const [playingSince, setPlayingSince] = useState<number>(0);
     const [showDebugPanel, setShowDebugPanel] = useState(true);
-    const [showIrDebug, setShowIrDebug] = useState(true); // IRセンサーデバッグ表示
+    const [showIrDebug, setShowIrDebug] = useState(true);
 
     const pdfDocCacheRef = useRef<Map<string, Promise<any>>>(new Map());
 
-    // ★修正: 常にplaying状態として扱う（flow/currentNodeIdがあれば再生中）
     const isPlaying = flow != null && currentNodeId != null;
-
-    // PC側音声の初期化
-    useEffect(() => {
-        const q = new Audio("https://www.myinstants.com/media/sounds/nice-shot-wii-sports_DJJ0VOz.mp3");
-        const w = new Audio("https://www.myinstants.com/media/sounds/crowdaw.mp3");
-        const e = new Audio("https://www.myinstants.com/media/sounds/crowdoh.mp3");
-        q.preload = "auto";
-        w.preload = "auto";
-        e.preload = "auto";
-        soundboardRef.current = { q, w, e };
-        console.log("[Audio] Audio elements initialized");
-
-        // ユーザーインタラクション時にオーディオコンテキストをアンロック
-        const unlockOnInteraction = () => {
-            if (audioUnlockedRef.current) return;
-            console.log("[Audio] User interaction detected, unlocking audio");
-            void tryUnlockAudio();
-        };
-
-        // クリックやタッチでアンロックを試行
-        window.addEventListener("click", unlockOnInteraction);
-        window.addEventListener("touchstart", unlockOnInteraction);
-        window.addEventListener("keydown", unlockOnInteraction);
-
-        return () => {
-            window.removeEventListener("click", unlockOnInteraction);
-            window.removeEventListener("touchstart", unlockOnInteraction);
-            window.removeEventListener("keydown", unlockOnInteraction);
-            for (const a of [q, w, e]) {
-                try {
-                    a.pause();
-                } catch {
-                    // ignore
-                }
-            }
-            soundboardRef.current = {};
-        };
-    }, [tryUnlockAudio]);
 
     // スペースキーでデバッグパネルとIRセンサーデバッグ表示を切り替え
     useEffect(() => {

@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 18, "column": 0}, "map": {"version":3,"sources":["file:///Users/yamamototakuma/Desktop/WiiSugeee/frontend/src/app/present/page.tsx"],"sourcesContent":["import { Suspense } from \"react\";\nimport { PresenterView } from \"@/components/presenter/PresenterView\";\n\nexport default function PresentPage() {\n\treturn (\n\t\t<Suspense>\n\t\t\t<PresenterView />\n\t\t</Suspense>\n\t);\n}\n"],"names":[],"mappings":";;;;;AAAA;;;;;;;;;AAGe,SAAS;IACvB,qBACC,kRAAC,qPAAQ;kBACR,cAAA,kRAAC;;;;;;;;;;AAGJ"}}]
+}
