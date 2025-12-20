@@ -15,6 +15,8 @@ import { SlideDisplay } from "@/components/presenter/SlideDisplay";
 import { DrawingCanvas } from "@/components/presenter/DrawingCanvas";
 import { IrPointerOverlay } from "@/components/presenter/IrPointerOverlay";
 import { EraserCursor } from "@/components/presenter/EraserCursor";
+import { WiiReconnectPopup2 } from "./WiiReconnectPopup2";
+import { WiiDisconnectPopup2 } from "./WiiDisconnectPopup2";
 
 export function PresenterView() {
     const router = useRouter();
@@ -27,99 +29,99 @@ export function PresenterView() {
     const lastIrSensToggleTimeRef = useRef<number>(0); // IRセンサートグルの多重入力防止
 
     // Wiiリモコンの状態を取得
-	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt, irCursorEnabled, setIrCursorEnabled , playWiiSound } = useWiiController();
+    const { wiiState, pressed, wiiConnected, wiiDisconnectedAt, irCursorEnabled, setIrCursorEnabled, playWiiSound } = useWiiController();
 
-	// PC側の音声再生用（HTMLAudioElement）
-	const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
-	const audioUnlockedRef = useRef(false);
-	const pendingSoundRef = useRef<"q" | "w" | "e" | null>(null);
+    // PC側の音声再生用（HTMLAudioElement）
+    const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
+    const audioUnlockedRef = useRef(false);
+    const pendingSoundRef = useRef<"q" | "w" | "e" | null>(null);
 
-	const tryUnlockAudio = useCallback(async () => {
-		if (audioUnlockedRef.current) return;
+    const tryUnlockAudio = useCallback(async () => {
+        if (audioUnlockedRef.current) return;
 
-		const { q, w, e } = soundboardRef.current;
-		const audios = [q, w, e].filter(Boolean) as HTMLAudioElement[];
-		if (audios.length === 0) return;
+        const { q, w, e } = soundboardRef.current;
+        const audios = [q, w, e].filter(Boolean) as HTMLAudioElement[];
+        if (audios.length === 0) return;
 
-		try {
-			const a = audios[0];
-			const prevMuted = a.muted;
-			const prevVolume = a.volume;
-			a.muted = true;
-			a.volume = 0;
-			await a.play();
-			a.pause();
-			a.currentTime = 0;
-			a.muted = prevMuted;
-			a.volume = prevVolume;
-			audioUnlockedRef.current = true;
-			console.log("[Audio] Successfully unlocked audio context");
+        try {
+            const a = audios[0];
+            const prevMuted = a.muted;
+            const prevVolume = a.volume;
+            a.muted = true;
+            a.volume = 0;
+            await a.play();
+            a.pause();
+            a.currentTime = 0;
+            a.muted = prevMuted;
+            a.volume = prevVolume;
+            audioUnlockedRef.current = true;
+            console.log("[Audio] Successfully unlocked audio context");
 
-			const pending = pendingSoundRef.current;
-			pendingSoundRef.current = null;
-			if (pending) {
-				const next = soundboardRef.current[pending];
-				if (next) {
-					next.currentTime = 0;
-					void next.play().catch((err) => {
-						console.warn("sound play failed", pending, err);
-					});
-				}
-			}
-		} catch (err) {
-			console.warn("audio unlock failed", err);
-		}
-	}, []);
+            const pending = pendingSoundRef.current;
+            pendingSoundRef.current = null;
+            if (pending) {
+                const next = soundboardRef.current[pending];
+                if (next) {
+                    next.currentTime = 0;
+                    void next.play().catch((err) => {
+                        console.warn("sound play failed", pending, err);
+                    });
+                }
+            }
+        } catch (err) {
+            console.warn("audio unlock failed", err);
+        }
+    }, []);
 
-	// PC側で音声を再生（HTMLAudio）
-	const playSoundOnPC = useCallback(async (key: "q" | "w" | "e") => {
-		const a = soundboardRef.current[key];
-		if (!a) {
-			console.warn(`[Audio] No audio element for key: ${key}`);
-			return;
-		}
-		
-		// オーディオがアンロックされていない場合、アンロックを試行
-		if (!audioUnlockedRef.current) {
-			console.log(`[Audio] Attempting to unlock audio context for ${key}`);
-			pendingSoundRef.current = key;
-			await tryUnlockAudio();
-			// アンロックに失敗した場合はペンディングに保存済み
-			if (!audioUnlockedRef.current) {
-				console.warn("[Audio] Audio context not unlocked yet, sound will play after user interaction");
-				return;
-			}
-		}
+    // PC側で音声を再生（HTMLAudio）
+    const playSoundOnPC = useCallback(async (key: "q" | "w" | "e") => {
+        const a = soundboardRef.current[key];
+        if (!a) {
+            console.warn(`[Audio] No audio element for key: ${key}`);
+            return;
+        }
 
-		console.log(`[Audio] Playing sound on PC: ${key}`);
-		a.currentTime = 0;
-		void a.play().catch((err) => {
-			console.warn(`[Audio] Sound play failed for ${key}:`, err);
-			pendingSoundRef.current = key;
-		});
-	}, [tryUnlockAudio]);
+        // オーディオがアンロックされていない場合、アンロックを試行
+        if (!audioUnlockedRef.current) {
+            console.log(`[Audio] Attempting to unlock audio context for ${key}`);
+            pendingSoundRef.current = key;
+            await tryUnlockAudio();
+            // アンロックに失敗した場合はペンディングに保存済み
+            if (!audioUnlockedRef.current) {
+                console.warn("[Audio] Audio context not unlocked yet, sound will play after user interaction");
+                return;
+            }
+        }
 
-	// Wiiリモコン側で音声を再生
-	const playSoundOnWii = useCallback(
-		(key: "q" | "w" | "e") => {
-			if (key === "q") playWiiSound("shot");
-			else if (key === "e") playWiiSound("oh");
-			else playWiiSound("uxo");
-		},
-		[playWiiSound],
-	);
+        console.log(`[Audio] Playing sound on PC: ${key}`);
+        a.currentTime = 0;
+        void a.play().catch((err) => {
+            console.warn(`[Audio] Sound play failed for ${key}:`, err);
+            pendingSoundRef.current = key;
+        });
+    }, [tryUnlockAudio]);
 
-	// 汎用の音声再生関数（outputDeviceで出力先を指定）
-	const playSound = useCallback(
-		(key: "q" | "w" | "e", outputDevice: "pc" | "wii" = "pc") => {
-			if (outputDevice === "wii") {
-				playSoundOnWii(key);
-			} else {
-				playSoundOnPC(key);
-			}
-		},
-		[playSoundOnPC, playSoundOnWii],
-	);
+    // Wiiリモコン側で音声を再生
+    const playSoundOnWii = useCallback(
+        (key: "q" | "w" | "e") => {
+            if (key === "q") playWiiSound("shot");
+            else if (key === "e") playWiiSound("oh");
+            else playWiiSound("uxo");
+        },
+        [playWiiSound],
+    );
+
+    // 汎用の音声再生関数（outputDeviceで出力先を指定）
+    const playSound = useCallback(
+        (key: "q" | "w" | "e", outputDevice: "pc" | "wii" = "pc") => {
+            if (outputDevice === "wii") {
+                playSoundOnWii(key);
+            } else {
+                playSoundOnPC(key);
+            }
+        },
+        [playSoundOnPC, playSoundOnWii],
+    );
 
     const returnTo = useMemo(() => {
         return searchParams.get("from") === "editor" ? "/editor" : "/";
@@ -145,43 +147,43 @@ export function PresenterView() {
     // ★修正: 常にplaying状態として扱う（flow/currentNodeIdがあれば再生中）
     const isPlaying = flow != null && currentNodeId != null;
 
-	// PC側音声の初期化
-	useEffect(() => {
-		const q = new Audio("https://www.myinstants.com/media/sounds/nice-shot-wii-sports_DJJ0VOz.mp3");
-		const w = new Audio("https://www.myinstants.com/media/sounds/crowdaw.mp3");
-		const e = new Audio("https://www.myinstants.com/media/sounds/crowdoh.mp3");
-		q.preload = "auto";
-		w.preload = "auto";
-		e.preload = "auto";
-		soundboardRef.current = { q, w, e };
-		console.log("[Audio] Audio elements initialized");
-		
-		// ユーザーインタラクション時にオーディオコンテキストをアンロック
-		const unlockOnInteraction = () => {
-			if (audioUnlockedRef.current) return;
-			console.log("[Audio] User interaction detected, unlocking audio");
-			void tryUnlockAudio();
-		};
-		
-		// クリックやタッチでアンロックを試行
-		window.addEventListener("click", unlockOnInteraction);
-		window.addEventListener("touchstart", unlockOnInteraction);
-		window.addEventListener("keydown", unlockOnInteraction);
-		
-		return () => {
-			window.removeEventListener("click", unlockOnInteraction);
-			window.removeEventListener("touchstart", unlockOnInteraction);
-			window.removeEventListener("keydown", unlockOnInteraction);
-			for (const a of [q, w, e]) {
-				try {
-					a.pause();
-				} catch {
-					// ignore
-				}
-			}
-			soundboardRef.current = {};
-		};
-	}, [tryUnlockAudio]);
+    // PC側音声の初期化
+    useEffect(() => {
+        const q = new Audio("https://www.myinstants.com/media/sounds/nice-shot-wii-sports_DJJ0VOz.mp3");
+        const w = new Audio("https://www.myinstants.com/media/sounds/crowdaw.mp3");
+        const e = new Audio("https://www.myinstants.com/media/sounds/crowdoh.mp3");
+        q.preload = "auto";
+        w.preload = "auto";
+        e.preload = "auto";
+        soundboardRef.current = { q, w, e };
+        console.log("[Audio] Audio elements initialized");
+
+        // ユーザーインタラクション時にオーディオコンテキストをアンロック
+        const unlockOnInteraction = () => {
+            if (audioUnlockedRef.current) return;
+            console.log("[Audio] User interaction detected, unlocking audio");
+            void tryUnlockAudio();
+        };
+
+        // クリックやタッチでアンロックを試行
+        window.addEventListener("click", unlockOnInteraction);
+        window.addEventListener("touchstart", unlockOnInteraction);
+        window.addEventListener("keydown", unlockOnInteraction);
+
+        return () => {
+            window.removeEventListener("click", unlockOnInteraction);
+            window.removeEventListener("touchstart", unlockOnInteraction);
+            window.removeEventListener("keydown", unlockOnInteraction);
+            for (const a of [q, w, e]) {
+                try {
+                    a.pause();
+                } catch {
+                    // ignore
+                }
+            }
+            soundboardRef.current = {};
+        };
+    }, [tryUnlockAudio]);
 
     // スペースキーでデバッグパネルとIRセンサーデバッグ表示を切り替え
     useEffect(() => {
@@ -192,7 +194,7 @@ export function PresenterView() {
                 setShowIrDebug(prev => !prev);
             }
         };
-        
+
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, []);
@@ -207,9 +209,9 @@ export function PresenterView() {
             const arrayBuffer = await blob.arrayBuffer();
             const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
             pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-				"pdfjs-dist/legacy/build/pdf.worker.min.mjs",
-				import.meta.url,
-			).toString();
+                "pdfjs-dist/legacy/build/pdf.worker.min.mjs",
+                import.meta.url,
+            ).toString();
             return await pdfjs.getDocument({ data: arrayBuffer }).promise;
         })();
 
@@ -224,11 +226,11 @@ export function PresenterView() {
 
     // お絵描き用の座標リスト
     const [drawingPoints, setDrawingPoints] = useState<Array<{ x: number; y: number; mode?: "draw" | "erase" } | null>>([]);
-    
+
     // 消しゴムモード（トグル式）- XキーとWiiボタンで共通
     const [eraserMode, setEraserMode] = useState(false);
     const [eraserButtonName, setEraserButtonName] = useState<string | null>(null);
-    
+
     // カーソル位置（消しゴムカーソル表示用）
     const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
 
@@ -237,8 +239,8 @@ export function PresenterView() {
 
     // 現在のノードデータ
     const currentNode = useMemo(() =>
-		flow?.nodes.find((n) => n.id === currentNodeId),
-		[flow, currentNodeId]);
+        flow?.nodes.find((n) => n.id === currentNodeId),
+        [flow, currentNodeId]);
 
     // ★修正: 初回マウント時に自動的にプレゼンテーションを開始
     useEffect(() => {
@@ -249,21 +251,21 @@ export function PresenterView() {
             setCurrentNodeId(null);
             return;
         }
-        
+
         // バインド設定を読み込み
         const storedBindings = getProjectBindings();
-        const flowWithBindings = storedBindings ? 
+        const flowWithBindings = storedBindings ?
             { ...loaded, projectBindings: storedBindings } : loaded;
-        
+
         console.log("PresenterView: Auto-starting presentation with bindings", { storedBindings, flowWithBindings });
-        
+
         setError(null);
         setFlow(flowWithBindings);
-        
+
         // Startノードから開始
         const startNode = loaded.nodes.find((n) => n.data.label === "Start") || loaded.nodes[0];
         setCurrentNodeId(startNode.id);
-        
+
         // Wii接続状態を記録
         setStartedWithWii(!!wiiConnected);
         setPlayingSince(Date.now());
@@ -281,31 +283,31 @@ export function PresenterView() {
 
     const branchOptions = useMemo(() => {
         // 1-9 の数字で選べる分岐
-		const options: Array<{ key: string; target: string }> = [];
-		const used = new Set<string>();
+        const options: Array<{ key: string; target: string }> = [];
+        const used = new Set<string>();
 
-		for (const edge of outgoingEdges) {
-			const label = (edge.label ?? "").trim();
-			const m = label.match(/^([1-9])(?:\b|\s|:|-)/);
-			if (m) {
-				const k = m[1];
-				if (!used.has(k)) {
-					options.push({ key: k, target: edge.target });
-					used.add(k);
-				}
-			}
-		}
+        for (const edge of outgoingEdges) {
+            const label = (edge.label ?? "").trim();
+            const m = label.match(/^([1-9])(?:\b|\s|:|-)/);
+            if (m) {
+                const k = m[1];
+                if (!used.has(k)) {
+                    options.push({ key: k, target: edge.target });
+                    used.add(k);
+                }
+            }
+        }
 
-		// ラベルに番号がない場合は、配列順で 1..n を割り当て
-		for (const edge of outgoingEdges) {
-			if (options.length >= 9) break;
-			const nextKey = String(options.length + 1);
-			if (used.has(nextKey)) continue;
-			options.push({ key: nextKey, target: edge.target });
-			used.add(nextKey);
-		}
+        // ラベルに番号がない場合は、配列順で 1..n を割り当て
+        for (const edge of outgoingEdges) {
+            if (options.length >= 9) break;
+            const nextKey = String(options.length + 1);
+            if (used.has(nextKey)) continue;
+            options.push({ key: nextKey, target: edge.target });
+            used.add(nextKey);
+        }
 
-		return options;
+        return options;
     }, [outgoingEdges]);
 
     const hasMultipleBranches = outgoingEdges.length >= 2;
@@ -313,64 +315,64 @@ export function PresenterView() {
     // ノード移動処理
     const navigateTo = useCallback((nodeId: string) => {
         // クールタイムチェック (500ms以内の連続遷移は無視)
-		const now = Date.now();
-		if (now - lastNavTime.current < 500) return;
-		lastNavTime.current = now;
+        const now = Date.now();
+        if (now - lastNavTime.current < 500) return;
+        lastNavTime.current = now;
 
-		setCurrentNodeId(nodeId);
-		setDrawingPoints([]); // スライドが変わったら線を消す
+        setCurrentNodeId(nodeId);
+        setDrawingPoints([]); // スライドが変わったら線を消す
     }, []);
 
     // 次へ（ロジック改良版）
     const nextSlide = useCallback(() => {
         if (!flow || !currentNodeId) return;
-		// 分岐が複数ある場合は、数字選択を優先する
-		const edges = flow.edges.filter((e) => e.source === currentNodeId);
-		if (edges.length >= 2) return;
+        // 分岐が複数ある場合は、数字選択を優先する
+        const edges = flow.edges.filter((e) => e.source === currentNodeId);
+        if (edges.length >= 2) return;
 
-		// 現在のノードから出ているエッジをすべて取得
-		// (上で取得済み)
+        // 現在のノードから出ているエッジをすべて取得
+        // (上で取得済み)
 
-		if (edges.length === 0) return;
+        if (edges.length === 0) return;
 
-		// 優先順位付け
-		// 1. ラベルがないエッジ (デフォルトルート)
-		// 2. ラベルが "next" のエッジ
-		// 3. それ以外 (最初に見つかったもの)
-		const targetEdge =
-			edges.find(e => !e.label || e.label.trim() === "") ||
-			edges.find(e => e.label === "next") ||
-			edges[0];
+        // 優先順位付け
+        // 1. ラベルがないエッジ (デフォルトルート)
+        // 2. ラベルが "next" のエッジ
+        // 3. それ以外 (最初に見つかったもの)
+        const targetEdge =
+            edges.find(e => !e.label || e.label.trim() === "") ||
+            edges.find(e => e.label === "next") ||
+            edges[0];
 
-		if (targetEdge) navigateTo(targetEdge.target);
+        if (targetEdge) navigateTo(targetEdge.target);
     }, [flow, currentNodeId, navigateTo]);
 
     const branchByNumberKey = useCallback(
-		(key: string) => {
-			if (!hasMultipleBranches) return;
-			const opt = branchOptions.find((o) => o.key === key);
-			if (opt) navigateTo(opt.target);
-		},
-		[branchOptions, hasMultipleBranches, navigateTo],
-	);
+        (key: string) => {
+            if (!hasMultipleBranches) return;
+            const opt = branchOptions.find((o) => o.key === key);
+            if (opt) navigateTo(opt.target);
+        },
+        [branchOptions, hasMultipleBranches, navigateTo],
+    );
 
     // 前へ（逆順検索）
     const prevSlide = useCallback(() => {
         if (!flow || !currentNodeId) return;
-		// 自分に向かっているエッジを探して戻る（簡易実装）
-		const edge = flow.edges.find(e => e.target === currentNodeId);
-		if (edge) navigateTo(edge.source);
+        // 自分に向かっているエッジを探して戻る（簡易実装）
+        const edge = flow.edges.find(e => e.target === currentNodeId);
+        if (edge) navigateTo(edge.source);
     }, [flow, currentNodeId, navigateTo]);
 
     // 分岐処理（エッジのラベルで検索）
     const branchTo = useCallback((keywords: string[]) => {
         if (!flow || !currentNodeId) return;
-		const edges = flow.edges.filter(e => e.source === currentNodeId);
-		const target = edges.find(e => keywords.some(k => e.label?.includes(k)));
-		if (target) {
-			console.log("分岐しました:", target.label);
-			navigateTo(target.target);
-		}
+        const edges = flow.edges.filter(e => e.source === currentNodeId);
+        const target = edges.find(e => keywords.some(k => e.label?.includes(k)));
+        if (target) {
+            console.log("分岐しました:", target.label);
+            navigateTo(target.target);
+        }
     }, [flow, currentNodeId, navigateTo]);
 
     // ★追加: リアクションをデバッグする（N=One, M=Two）
@@ -383,15 +385,15 @@ export function PresenterView() {
 
         const handleKeyDown = (e: KeyboardEvent) => {
             // 追加: 線をクリア (R)
-			if (e.key === "r" || e.key === "R") {
-				setDrawingPoints([]);
-				isMouseDrawingRef.current = false;
-				wasWiiADownRef.current = false;
-				return;
-			}
-			
-			// ペイントと消しゴムを切り替え (X) - Wiiボタンと同じ挙動
-			if (e.key === "x" || e.key === "X") {
+            if (e.key === "r" || e.key === "R") {
+                setDrawingPoints([]);
+                isMouseDrawingRef.current = false;
+                wasWiiADownRef.current = false;
+                return;
+            }
+
+            // ペイントと消しゴムを切り替え (X) - Wiiボタンと同じ挙動
+            if (e.key === "x" || e.key === "X") {
                 // 押しっぱなしでON/OFFが暴れないように、リピートは無視
                 if (e.repeat) return;
                 setEraserMode((prev) => {
@@ -405,56 +407,56 @@ export function PresenterView() {
                     }
                     return next;
                 });
-				return;
-			}
-			
-			if (!e.repeat) {
-				if (e.key === "q" || e.key === "Q") {
-					playSound("q");
-					return;
-				}
-				if (e.key === "w" || e.key === "W") {
-					playSound("w");
-					return;
-				}
-				if (e.key === "e" || e.key === "E") {
-					playSound("e");
-					return;
-				}
-			}
+                return;
+            }
 
-			// ★追加: リアクション（N / M）
-			// 押しっぱなしで増殖しないように repeat を無視
-			if (!e.repeat) {
-				if (e.key === "n" || e.key === "N") {
-					setDebugEmitClap(true);
-					queueMicrotask(() => setDebugEmitClap(false)); // 1回だけ発火
-					return;
-				}
-				if (e.key === "m" || e.key === "M") {
-					setDebugEmitLaugh(true);
-					queueMicrotask(() => setDebugEmitLaugh(false)); // 1回だけ発火
-					return;
-				}
-			}
+            if (!e.repeat) {
+                if (e.key === "q" || e.key === "Q") {
+                    playSound("q");
+                    return;
+                }
+                if (e.key === "w" || e.key === "W") {
+                    playSound("w");
+                    return;
+                }
+                if (e.key === "e" || e.key === "E") {
+                    playSound("e");
+                    return;
+                }
+            }
 
-			// 既存: 分岐 1..9
-			if (e.key >= "1" && e.key <= "9") {
-				branchByNumberKey(e.key);
-				return;
-			}
-			if (e.key === "ArrowRight") {
-				if (!hasMultipleBranches) nextSlide();
-			}
-			if (e.key === "ArrowLeft") prevSlide();
-			// ESCキーで元の画面へ戻る（エディタ経由ならエディタへ）
-			if (e.key === "Escape") goBack();
-			
-			// ★追加: CキーでIRカーソル切替
-			if ((e.key === "c" || e.key === "C") && !e.repeat) {
-				setIrCursorEnabled(!irCursorEnabled);
-				return;
-			}
+            // ★追加: リアクション（N / M）
+            // 押しっぱなしで増殖しないように repeat を無視
+            if (!e.repeat) {
+                if (e.key === "n" || e.key === "N") {
+                    setDebugEmitClap(true);
+                    queueMicrotask(() => setDebugEmitClap(false)); // 1回だけ発火
+                    return;
+                }
+                if (e.key === "m" || e.key === "M") {
+                    setDebugEmitLaugh(true);
+                    queueMicrotask(() => setDebugEmitLaugh(false)); // 1回だけ発火
+                    return;
+                }
+            }
+
+            // 既存: 分岐 1..9
+            if (e.key >= "1" && e.key <= "9") {
+                branchByNumberKey(e.key);
+                return;
+            }
+            if (e.key === "ArrowRight") {
+                if (!hasMultipleBranches) nextSlide();
+            }
+            if (e.key === "ArrowLeft") prevSlide();
+            // ESCキーで元の画面へ戻る（エディタ経由ならエディタへ）
+            if (e.key === "Escape") goBack();
+
+            // ★追加: CキーでIRカーソル切替
+            if ((e.key === "c" || e.key === "C") && !e.repeat) {
+                setIrCursorEnabled(!irCursorEnabled);
+                return;
+            }
         };
 
         window.addEventListener("keydown", handleKeyDown);
@@ -483,83 +485,83 @@ export function PresenterView() {
             if (eraserMode && act.type !== "eraser") {
                 return;
             }
-            
+
             // ★デバッグ: アクション実行をログ出力
             console.log(`[WiiAction] Button: ${btnName || "unknown"}, Action:`, act);
-            
+
             switch (act.type) {
-				case "next":
-					nextSlide();
-					return;
-				case "prev":
-					prevSlide();
-					return;
-				case "branchIndex":
-					// 1..9 を “分岐選択（数字キー）” と同じ挙動にする
-					branchByNumberKey(String(act.index));
-					return;
-				case "branch": {
-					// 既存互換: A/B/HOME は 1..3 にマップ
-					if (!hasMultipleBranches) return;
-					const map: Record<string, string> = { A: "1", B: "2", HOME: "3" };
-				const k = map[act.kind];
-					if (k) branchByNumberKey(k);
-					return;
-				}
-				case "reaction":
-					// ReactionOverlay が pressed.One/Two を見ているので、ここでは何もしない
-					return;
-				case "paint":
-					// shouldPaintで別途処理するので、ここでは何もしない
-					break;
-				case "eraser":
-					// トグル式に切り替え（500msクールタイムで多重入力防止）
-					const nowEraser = Date.now();
-					if (nowEraser - lastEraserToggleTimeRef.current < 500) {
-						console.log("[Eraser] Ignoring rapid toggle");
-						return;
-					}
-					lastEraserToggleTimeRef.current = nowEraser;
-					
-					if (eraserMode) {
-						// 解除
-						setEraserMode(false);
-						setEraserButtonName(null);
-						setCursorPos(null);
-					} else {
-						// ON
-						setEraserMode(true);
-						setEraserButtonName(btnName || "unknown");
-						// カーソルを画面中央に
-						setCursorPos({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-					}
-					break;
-				case "sound":
-					// 音声再生処理（outputDeviceに応じてPCまたはWiiで再生）
-					if (act.kind === "shot") playSound("q", act.outputDevice);
-					else if (act.kind === "oh") playSound("e", act.outputDevice);
-					else if (act.kind === "uxo") playSound("w", act.outputDevice);
-					return;
-				case "remove":
-					// 描画を消去
-					setDrawingPoints([]);
-					isMouseDrawingRef.current = false;
-					wasWiiADownRef.current = false;
-					return;
-				case "irSens":
-					// IRセンサーカーソルの切替（500msクールタイムで多重入力防止）
-					const nowIrSens = Date.now();
-					if (nowIrSens - lastIrSensToggleTimeRef.current < 500) {
-						console.log("[IRSens] Ignoring rapid toggle");
-						return;
-					}
-					lastIrSensToggleTimeRef.current = nowIrSens;
-					
-					setIrCursorEnabled(!irCursorEnabled);
-					return;
-				case "none":
-				default:
-					return;
+                case "next":
+                    nextSlide();
+                    return;
+                case "prev":
+                    prevSlide();
+                    return;
+                case "branchIndex":
+                    // 1..9 を “分岐選択（数字キー）” と同じ挙動にする
+                    branchByNumberKey(String(act.index));
+                    return;
+                case "branch": {
+                    // 既存互換: A/B/HOME は 1..3 にマップ
+                    if (!hasMultipleBranches) return;
+                    const map: Record<string, string> = { A: "1", B: "2", HOME: "3" };
+                    const k = map[act.kind];
+                    if (k) branchByNumberKey(k);
+                    return;
+                }
+                case "reaction":
+                    // ReactionOverlay が pressed.One/Two を見ているので、ここでは何もしない
+                    return;
+                case "paint":
+                    // shouldPaintで別途処理するので、ここでは何もしない
+                    break;
+                case "eraser":
+                    // トグル式に切り替え（500msクールタイムで多重入力防止）
+                    const nowEraser = Date.now();
+                    if (nowEraser - lastEraserToggleTimeRef.current < 500) {
+                        console.log("[Eraser] Ignoring rapid toggle");
+                        return;
+                    }
+                    lastEraserToggleTimeRef.current = nowEraser;
+
+                    if (eraserMode) {
+                        // 解除
+                        setEraserMode(false);
+                        setEraserButtonName(null);
+                        setCursorPos(null);
+                    } else {
+                        // ON
+                        setEraserMode(true);
+                        setEraserButtonName(btnName || "unknown");
+                        // カーソルを画面中央に
+                        setCursorPos({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                    }
+                    break;
+                case "sound":
+                    // 音声再生処理（outputDeviceに応じてPCまたはWiiで再生）
+                    if (act.kind === "shot") playSound("q", act.outputDevice);
+                    else if (act.kind === "oh") playSound("e", act.outputDevice);
+                    else if (act.kind === "uxo") playSound("w", act.outputDevice);
+                    return;
+                case "remove":
+                    // 描画を消去
+                    setDrawingPoints([]);
+                    isMouseDrawingRef.current = false;
+                    wasWiiADownRef.current = false;
+                    return;
+                case "irSens":
+                    // IRセンサーカーソルの切替（500msクールタイムで多重入力防止）
+                    const nowIrSens = Date.now();
+                    if (nowIrSens - lastIrSensToggleTimeRef.current < 500) {
+                        console.log("[IRSens] Ignoring rapid toggle");
+                        return;
+                    }
+                    lastIrSensToggleTimeRef.current = nowIrSens;
+
+                    setIrCursorEnabled(!irCursorEnabled);
+                    return;
+                case "none":
+                default:
+                    return;
             }
         },
         [nextSlide, prevSlide, branchByNumberKey, hasMultipleBranches, playSound, eraserMode, irCursorEnabled, setIrCursorEnabled],
@@ -574,12 +576,12 @@ export function PresenterView() {
         for (const btn of Object.keys(pressed)) {
             const isDown = (pressed as Record<string, boolean>)[btn];
             if (!isDown) continue;
-            
+
             // ★デバッグ: ボタン押下検出をログ出力
             console.log(`[WiiPress] Button pressed: ${btn}`);
 
             const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn] ?? { type: "none" };
-            
+
             // paint/eraser以外のアクションを実行
             if (act.type !== "paint" && act.type !== "eraser") {
                 runAction(act, btn);
@@ -675,7 +677,7 @@ export function PresenterView() {
         const interval = setInterval(() => {
             const now = Date.now();
             const paintElapsed = now - lastPaintInputTimeRef.current;
-            
+
             if (paintElapsed > 100 && shouldPaint) {
                 setShouldPaint(false);
                 setIsPainting(false); // ★追加: Wiiボタン描画終了時もペンカーソル解除
@@ -694,7 +696,7 @@ export function PresenterView() {
     useEffect(() => {
         // IRカーソルOFFの場合はIR描画を無効化
         if (!irCursorEnabled) return;
-        
+
         if (!wiiState || !wiiState.cursor) return;
 
         // ★IRカーソルON時：バックエンドから受信した正規化済みcursor座標のみを使用
@@ -703,7 +705,7 @@ export function PresenterView() {
         // しかし描画はペン先の位置（例: 6, 28）で行う必要があるため、オフセットを加算。
         const PEN_TIP_OFFSET_X = 0;  // pen.pngのペン先X座標（実際の画像に合わせて調整）
         const PEN_TIP_OFFSET_Y = 0; // pen.pngのペン先Y座標（実際の画像に合わせて調整）
-        
+
         const pos = {
             x: wiiState.cursor.x * window.innerWidth + PEN_TIP_OFFSET_X,
             y: wiiState.cursor.y * window.innerHeight + PEN_TIP_OFFSET_Y,
@@ -712,11 +714,11 @@ export function PresenterView() {
         // 消しゴムモード中: IRでカーソルを移動
         if (eraserMode) {
             setCursorPos(pos);
-            
+
             // AとBを同時押ししているかチェック
             const isAPressed = wiiState.buttons.A;
             const isBPressed = wiiState.buttons.B;
-            
+
             if (isAPressed && isBPressed) {
                 // A+B同時押しで消去
                 setDrawingPoints((prev) => {
@@ -770,7 +772,7 @@ export function PresenterView() {
                 const el = e.target as HTMLElement | null;
                 if (el && el.closest("button, a, input, textarea, select")) return;
                 e.preventDefault();
-                
+
                 // 消しゴムモード中は左クリックで消去開始
                 if (eraserMode) {
                     isMouseDrawingRef.current = true;
@@ -783,7 +785,7 @@ export function PresenterView() {
                     });
                     return;
                 }
-                
+
                 // 通常モード：左クリックで描画開始
                 isMouseDrawingRef.current = true;
                 setIsPainting(true); // ペンカーソルに変更
@@ -796,11 +798,11 @@ export function PresenterView() {
             }}
             onMouseMove={(e) => {
                 if (!isPlaying) return;
-                
+
                 // 消しゴムモード時：カーソル位置を常に更新（赤い円を追従させる）
                 if (eraserMode) {
                     setCursorPos({ x: e.clientX, y: e.clientY });
-                    
+
                     // マウスドラッグ中のみ消去を実行
                     if (isMouseDrawingRef.current) {
                         e.preventDefault();
@@ -812,7 +814,7 @@ export function PresenterView() {
                     }
                     return;
                 }
-                
+
                 // --- 通常モード：描画（マウス or Wii PAINT） ---
 
                 // 1) マウスドラッグ中は常にマウス描画を優先
@@ -868,6 +870,7 @@ export function PresenterView() {
                 background: "black",
             }}
         >
+            {/*ここから*/}
             <WiiDisconnectPopup
                 isPlaying={isPlaying}
                 startedWithWii={startedWithWii}
@@ -881,6 +884,22 @@ export function PresenterView() {
                 wiiConnected={wiiConnected}
                 startedWithWii={startedWithWii}
             />
+            {/*ここ残す*/}
+            {/*ここから*/}
+            <WiiDisconnectPopup2
+                isPlaying={isPlaying}
+                startedWithWii={startedWithWii}
+                wiiConnected={wiiConnected}
+                wiiDisconnectedAt={wiiDisconnectedAt}
+                playingSince={playingSince}
+            />
+
+            <WiiReconnectPopup2
+                isPlaying={isPlaying}
+                wiiConnected={wiiConnected}
+                startedWithWii={startedWithWii}
+            />
+            {/*ここけす*/}
 
             {/* 戻るボタン（左上） */}
             <div style={{ position: "absolute", top: 20, left: 20, zIndex: 10000 }}>
@@ -893,9 +912,9 @@ export function PresenterView() {
             <ReactionOverlay emitClap={shouldEmitClap} emitLaugh={shouldEmitLaugh} />
 
             {/* IRポインターオーバーレイ */}
-            <IrPointerOverlay 
-                wiiState={wiiState} 
-                isPlaying={isPlaying} 
+            <IrPointerOverlay
+                wiiState={wiiState}
+                isPlaying={isPlaying}
                 irCursorEnabled={irCursorEnabled}
                 showIrDebug={showIrDebug}
             />
@@ -934,12 +953,12 @@ export function PresenterView() {
             </div>
 
             {/* 消しゴムカーソル */}
-            <EraserCursor 
+            <EraserCursor
                 position={cursorPos}
                 isActive={eraserMode}
                 buttonName={eraserButtonName}
             />
-            
+
             {/* 消しゴムカーソル */}
             {eraserMode && cursorPos && (
                 <div
