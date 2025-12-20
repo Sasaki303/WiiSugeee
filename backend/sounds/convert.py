@@ -42,27 +42,28 @@ def convert_wav_to_raw(input_file, output_file, duration_sec=None):
     target_rate = 2000
     
     # エイリアシングノイズを防ぐためのローパスフィルタ
-    # ナイキスト周波数 (1000Hz) より少し下でカット
+    # ナイキスト周波数 (1000Hz) に近づけてより多くの周波数を保持
     nyquist = target_rate / 2
-    cutoff = 900  # 900Hz以下を通す
+    cutoff = 950  # 950Hz以下を通す（より多くの高音域を保持）
     
     # 正規化周波数
     w = cutoff / (sample_rate / 2)
     
-    # 4次バターワースフィルタ
+    # 8次バターワースフィルタ（より急峻なカットオフで品質向上）
     if w < 1.0:
-        b, a = signal.butter(4, w, 'low')
+        b, a = signal.butter(8, w, 'low')
         audio = signal.filtfilt(b, a, audio)
     
     if sample_rate != target_rate:
         num_samples = int(len(audio) * target_rate / sample_rate)
-        audio = signal.resample(audio, num_samples)
+        # 高品質リサンプリング
+        audio = signal.resample_poly(audio, target_rate, sample_rate)
     
     # 正規化して8bit符号付きPCMに変換 (-128 to 127)
     audio = audio.astype(np.float32)
     max_val = np.max(np.abs(audio))
     if max_val > 0:
-        audio = audio / max_val * 0.6  # 音割れ防止のためさらに下げる (0.6)
+        audio = audio / max_val * 0.85  # 音量を上げつつ音割れを防止 (0.85)
     
     # int8 (Signed) に変換
     audio = (audio * 127).astype(np.int8)
