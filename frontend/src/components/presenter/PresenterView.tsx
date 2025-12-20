@@ -20,7 +20,11 @@ export function PresenterView() {
     const searchParams = useSearchParams();
     const containerRef = useRef<HTMLDivElement | null>(null);
     const isMouseDrawingRef = useRef(false);
+    const [isPainting, setIsPainting] = useState(false);
     const wasWiiADownRef = useRef(false);
+
+    // Wiiリモコンの状態を取得
+	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt} = useWiiController();
 
     const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
     const playSound = useCallback((key: "q" | "w" | "e") => {
@@ -32,7 +36,7 @@ export function PresenterView() {
         } catch (err) {
             console.warn("sound play failed", key, err);
         }
-    }, []);
+	}, []);
 
     const returnTo = useMemo(() => {
         return searchParams.get("from") === "editor" ? "/editor" : "/";
@@ -45,15 +49,12 @@ export function PresenterView() {
     const goBack = useCallback(() => {
         router.push(returnTo);
     }, [router, returnTo]);
-
-    // Wiiリモコンの状態を取得
-    const { wiiState, pressed, wiiConnected, wiiDisconnectedAt } = useWiiController();
-
     const [flow, setFlow] = useState<SerializedFlow | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
     const [startedWithWii, setStartedWithWii] = useState(false);
     const [playingSince, setPlayingSince] = useState<number>(0);
+    const [showDebugPanel, setShowDebugPanel] = useState(true);
 
     const pdfDocCacheRef = useRef<Map<string, Promise<any>>>(new Map());
 
@@ -79,6 +80,19 @@ export function PresenterView() {
 			soundboardRef.current = {};
 		};
 	}, []);
+
+    // スペースキーでデバッグパネルの表示/非表示を切り替え
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.code === "Space" && e.target === document.body) {
+                e.preventDefault();
+                setShowDebugPanel(prev => !prev);
+            }
+        };
+        
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, []);
 
     const getOrLoadPdfDocument = useCallback(async (assetId: string) => {
         const cached = pdfDocCacheRef.current.get(assetId);
@@ -106,7 +120,14 @@ export function PresenterView() {
     }, []);
 
     // お絵描き用の座標リスト
-    const [drawingPoints, setDrawingPoints] = useState<Array<{ x: number; y: number } | null>>([]);
+    const [drawingPoints, setDrawingPoints] = useState<Array<{ x: number; y: number; mode?: "draw" | "erase" } | null>>([]);
+    
+    // 消しゴムモード（トグル式）- XキーとWiiボタンで共通
+    const [eraserMode, setEraserMode] = useState(false);
+    const [eraserButtonName, setEraserButtonName] = useState<string | null>(null);
+    
+    // カーソル位置（消しゴムカーソル表示用）
+    const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
 
     // 連続遷移を防ぐためのクールタイム管理
     const lastNavTime = useRef<number>(0);
@@ -266,6 +287,24 @@ export function PresenterView() {
 				return;
 			}
 			
+			// ペイントと消しゴムを切り替え (X) - Wiiボタンと同じ挙動
+			if (e.key === "x" || e.key === "X") {
+                // 押しっぱなしでON/OFFが暴れないように、リピートは無視
+                if (e.repeat) return;
+                setEraserMode((prev) => {
+                    const next = !prev;
+                    if (next) {
+                        setEraserButtonName("X");
+                        setCursorPos({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                    } else {
+                        setEraserButtonName(null);
+                        setCursorPos(null);
+                    }
+                    return next;
+                });
+				return;
+			}
+			
 			if (!e.repeat) {
 				if (e.key === "q" || e.key === "Q") {
 					playSound("q");
@@ -324,8 +363,13 @@ export function PresenterView() {
 
     // --- プロジェクト全体バインドを適用してアクション実行 ---
     const runAction = useCallback(
-        (a: BindingAction) => {
-            switch (a.type) {
+        (act: BindingAction, btnName?: string) => {
+            // 消しゴムモード中は、eraserアクション以外を無効化
+            if (eraserMode && act.type !== "eraser") {
+                return;
+            }
+            
+            switch (act.type) {
 				case "next":
 					nextSlide();
 					return;
@@ -334,13 +378,13 @@ export function PresenterView() {
 					return;
 				case "branchIndex":
 					// 1..9 を “分岐選択（数字キー）” と同じ挙動にする
-					branchByNumberKey(String(a.index));
+					branchByNumberKey(String(act.index));
 					return;
 				case "branch": {
 					// 既存互換: A/B/HOME は 1..3 にマップ
 					if (!hasMultipleBranches) return;
 					const map: Record<string, string> = { A: "1", B: "2", HOME: "3" };
-					const k = map[a.kind];
+				const k = map[act.kind];
 					if (k) branchByNumberKey(k);
 					return;
 				}
@@ -349,23 +393,40 @@ export function PresenterView() {
 					return;
 				case "paint":
 					// shouldPaintで別途処理するので、ここでは何もしない
-					return;
+					break;
+				case "eraser":
+					// トグル式に切り替え
+					if (eraserMode) {
+						// 解除
+						setEraserMode(false);
+						setEraserButtonName(null);
+						setCursorPos(null);
+					} else {
+						// ON
+						setEraserMode(true);
+						setEraserButtonName(btnName || "unknown");
+						// カーソルを画面中央に
+						setCursorPos({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+					}
+					break;
 				case "sound":
 					// 音声再生処理
-					if (a.kind === "shot") playSound("q");
-					else if (a.kind === "oh") playSound("e");
-					else if (a.kind === "uxo") playSound("w");
-					return;			case "remove":
-				// 描画を消去
-				setDrawingPoints([]);
-				isMouseDrawingRef.current = false;
-				wasWiiADownRef.current = false;
-				return;				case "none":
+				if (act.kind === "shot") playSound("q");
+				else if (act.kind === "oh") playSound("e");
+				else if (act.kind === "uxo") playSound("w");
+					return;
+				case "remove":
+					// 描画を消去
+					setDrawingPoints([]);
+					isMouseDrawingRef.current = false;
+					wasWiiADownRef.current = false;
+					return;
+				case "none":
 				default:
 					return;
             }
         },
-        [nextSlide, prevSlide, branchByNumberKey, hasMultipleBranches, playSound],
+        [nextSlide, prevSlide, branchByNumberKey, hasMultipleBranches, playSound, eraserMode],
     );
 
     // ★修正: Wiiリモコンのボタン処理（isPlayingがtrueの時のみ動作）
@@ -381,7 +442,14 @@ export function PresenterView() {
             if (!isDown || wasDown) continue;
 
             const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn] ?? { type: "none" };
-            runAction(act);
+            
+            // paint/eraser以外のアクションを実行
+            if (act.type !== "paint" && act.type !== "eraser") {
+                runAction(act, btn);
+            } else if (act.type === "eraser") {
+                // eraserボタンは常にトグル可能
+                runAction(act, btn);
+            }
         }
         prevPressedRef.current = { ...(pressed as Record<string, boolean>) };
     }, [pressed, isPlaying, effectiveProjectBindings, runAction]);
@@ -416,7 +484,7 @@ export function PresenterView() {
 
     // wiiState.buttonsをチェックして、現在PAINTボタンが押されているか継続的に監視
     useEffect(() => {
-        if (!isPlaying || !wiiState) return;
+        if (!isPlaying || !wiiState || eraserMode) return;
 
         // 現在押されているボタンの中にPAINTがあるかチェック
         let isPaintButtonPressed = false;
@@ -426,7 +494,6 @@ export function PresenterView() {
             const act = (effectiveProjectBindings as Record<string, BindingAction | undefined>)[btn];
             if (act?.type === "paint") {
                 isPaintButtonPressed = true;
-                break;
             }
         }
 
@@ -434,7 +501,7 @@ export function PresenterView() {
             lastPaintInputTimeRef.current = Date.now();
             setShouldPaint(true);
         }
-    }, [wiiState, effectiveProjectBindings, isPlaying]);
+    }, [wiiState, effectiveProjectBindings, isPlaying, eraserMode]);
 
     // 200msタイマーで描画状態をチェック
     useEffect(() => {
@@ -445,9 +512,9 @@ export function PresenterView() {
 
         const interval = setInterval(() => {
             const now = Date.now();
-            const elapsed = now - lastPaintInputTimeRef.current;
+            const paintElapsed = now - lastPaintInputTimeRef.current;
             
-            if (elapsed > 100 && shouldPaint) {
+            if (paintElapsed > 100 && shouldPaint) {
                 setShouldPaint(false);
                 // 描画を終了
                 if (isMouseDrawingRef.current) {
@@ -460,7 +527,7 @@ export function PresenterView() {
         return () => clearInterval(interval);
     }, [isPlaying, shouldPaint]);
 
-    // --- 描画ロジック (IRセンサー & PAINTボタン) ---
+    // --- 描画/消しゴムロジック (IRセンサー & PAINTボタン) ---
     useEffect(() => {
         if (!wiiState || wiiState.ir.length === 0) return;
 
@@ -470,6 +537,35 @@ export function PresenterView() {
         const y = (dot.y / 768) * window.innerHeight;
         const pos = { x, y };
 
+        // 消しゴムモード中: IRでカーソルを移動
+        if (eraserMode) {
+            setCursorPos(pos);
+            
+            // AとBを同時押ししているかチェック
+            const isAPressed = wiiState.buttons.A;
+            const isBPressed = wiiState.buttons.B;
+            
+            if (isAPressed && isBPressed) {
+                // A+B同時押しで消去
+                setDrawingPoints((prev) => {
+                    const next = prev.slice();
+                    if (!wasWiiADownRef.current) {
+                        if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
+                    }
+                    next.push({ ...pos, mode: "erase" });
+                    return next;
+                });
+                wasWiiADownRef.current = true;
+            } else {
+                // A+Bを離したら区切る
+                if (wasWiiADownRef.current) {
+                    wasWiiADownRef.current = false;
+                    setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
+                }
+            }
+            return;
+        }
+
         // PAINTバインドされたボタンを押している間、軌跡を追加
         if (shouldPaint) {
             setDrawingPoints((prev) => {
@@ -478,7 +574,7 @@ export function PresenterView() {
                     // 前回の線と繋がらないように区切りを入れる
                     if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
                 }
-                next.push(pos);
+                next.push({ ...pos, mode: "draw" });
                 return next;
             });
             wasWiiADownRef.current = true;
@@ -489,7 +585,7 @@ export function PresenterView() {
                 setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
             }
         }
-    }, [wiiState, shouldPaint]);
+    }, [wiiState, shouldPaint, eraserMode]);
 
 
     return (
@@ -502,49 +598,99 @@ export function PresenterView() {
                 const el = e.target as HTMLElement | null;
                 if (el && el.closest("button, a, input, textarea, select")) return;
                 e.preventDefault();
-                isMouseDrawingRef.current = true;
-                setDrawingPoints((prev) => {
-                    const next = prev.slice();
-                    if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
-                    next.push({ x: e.clientX, y: e.clientY });
-                    return next;
-                });
-            }}
-            onMouseMove={(e) => {
-                if (!isPlaying) return;
-                // PAINTボタンが押されている場合も描画
-                const shouldDrawWithPaint = shouldPaint;
-                if (!isMouseDrawingRef.current && !shouldDrawWithPaint) return;
                 
-                // PAINTボタンで描画開始
-                if (shouldDrawWithPaint && !isMouseDrawingRef.current) {
+                // 消しゴムモード中は左クリックで消去開始
+                if (eraserMode) {
                     isMouseDrawingRef.current = true;
+                    setIsPainting(false); // 消しゴムモード中はペンカーソルにしない
                     setDrawingPoints((prev) => {
                         const next = prev.slice();
                         if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
-                        next.push({ x: e.clientX, y: e.clientY });
+                        next.push({ x: e.clientX, y: e.clientY, mode: "erase" });
                         return next;
                     });
                     return;
                 }
                 
+                // 通常モード：左クリックで描画開始
+                isMouseDrawingRef.current = true;
+                setIsPainting(true); // ペンカーソルに変更
+                setDrawingPoints((prev) => {
+                    const next = prev.slice();
+                    if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
+                    next.push({ x: e.clientX, y: e.clientY, mode: "draw" });
+                    return next;
+                });
+            }}
+            onMouseMove={(e) => {
+                if (!isPlaying) return;
+                
+                // 消しゴムモード時：常にカーソル位置を更新
+                if (eraserMode) {
+                    setCursorPos({ x: e.clientX, y: e.clientY });
+                    
+                    // 左クリック中またはA+B同時押し中に消去
+                    const isAPressed = wiiState?.buttons.A || false;
+                    const isBPressed = wiiState?.buttons.B || false;
+                    const shouldErase = isMouseDrawingRef.current || (isAPressed && isBPressed);
+                    
+                    if (shouldErase) {
+                        e.preventDefault();
+                        setDrawingPoints((prev) => {
+                            const last = prev[prev.length - 1];
+                            if (last && last.x && Math.abs(last.x - e.clientX) + Math.abs(last.y - e.clientY) < 2) return prev;
+                            return [...prev, { x: e.clientX, y: e.clientY, mode: "erase" }];
+                        });
+                        
+                        // A+Bでの描画フラグを立てる
+                        if (isAPressed && isBPressed && !wasWiiADownRef.current) {
+                            wasWiiADownRef.current = true;
+                            setDrawingPoints((prev) => {
+                                const next = prev.slice();
+                                if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
+                                return next;
+                            });
+                        }
+                    }
+                    return;
+                }
+                
+                // PAINTボタンが押されている、またはマウスドラッグ中
+                if (!shouldPaint && !isMouseDrawingRef.current) return;
+                
                 e.preventDefault();
+                
+                // PAINTボタンで開始（マウスダウンしていない場合）
+                if (shouldPaint && !isMouseDrawingRef.current) {
+                    isMouseDrawingRef.current = true;
+                    setDrawingPoints((prev) => {
+                        const next = prev.slice();
+                        if (next.length > 0 && next[next.length - 1] !== null) next.push(null);
+                        next.push({ x: e.clientX, y: e.clientY, mode: "draw" });
+                        return next;
+                    });
+                    return;
+                }
+                
                 setDrawingPoints((prev) => {
                     const last = prev[prev.length - 1];
-                    if (last && Math.abs(last.x - e.clientX) + Math.abs(last.y - e.clientY) < 2) return prev;
-                    return [...prev, { x: e.clientX, y: e.clientY }];
+                    if (last && last.x && Math.abs(last.x - e.clientX) + Math.abs(last.y - e.clientY) < 2) return prev;
+                    return [...prev, { x: e.clientX, y: e.clientY, mode: "draw" }];
                 });
             }}
             onMouseUp={() => {
                 if (!isMouseDrawingRef.current) return;
                 isMouseDrawingRef.current = false;
+                setIsPainting(false); // ペンカーソル解除
                 setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
             }}
             onMouseLeave={() => {
                 if (!isMouseDrawingRef.current) return;
                 isMouseDrawingRef.current = false;
+                setIsPainting(false); // ペンカーソル解除
                 setDrawingPoints((prev) => (prev.length > 0 && prev[prev.length - 1] !== null ? [...prev, null] : prev));
             }}
+            className={isPainting ? 'presenter-painting' : 'presenter-container'}
             style={{
                 position: "relative",
                 width: "100vw",
@@ -585,22 +731,70 @@ export function PresenterView() {
             />
 
             {/* 描画レイヤー (最前面) */}
-            <DrawingCanvas drawingPoints={drawingPoints} />
-
-            {/* IRポインタ表示 */}
-            <IrPointerOverlay wiiState={wiiState} isPlaying={isPlaying} />
+            <DrawingCanvas
+                drawingPoints={drawingPoints}
+                wiiState={wiiState}
+                isPlaying={isPlaying}
+                shouldPaint={shouldPaint}
+                eraserMode={false}
+                eraserPosition={null}
+            />
 
             {/* デバッグ情報 (右上) */}
-            <WiiDebugPanel
-                wiiState={wiiState}
-                pressed={pressed}
-                effectiveProjectBindings={effectiveProjectBindings}
-            />
+            {showDebugPanel && (
+                <WiiDebugPanel
+                    wiiState={wiiState}
+                    pressed={pressed}
+                    effectiveProjectBindings={effectiveProjectBindings}
+                />
+            )}
 
             {/* 操作ガイド (左下) */}
             <div style={{ position: "absolute", bottom: 20, left: 20, color: "rgba(255,255,255,0.5)", fontSize: 14, pointerEvents: "none" }}>
-                [ESC] 戻る
+                [ESC] 戻る | [SPACE] デバッグ表示切替
             </div>
+
+            {/* 消しゴムモード表示 */}
+            {eraserMode && (
+                <div
+                    style={{
+                        position: "absolute",
+                        bottom: 80,
+                        right: 20,
+                        background: "rgba(255, 100, 100, 0.7)",
+                        color: "white",
+                        padding: "8px 16px",
+                        borderRadius: 6,
+                        fontSize: 13,
+                        fontWeight: "normal",
+                        zIndex: 9999,
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+                        pointerEvents: "none",
+                    }}
+                >
+                    消しゴムモード ON<br/>
+                    <small style={{ fontSize: 11 }}>左クリックまたはA+Bで消去 | {eraserButtonName}で解除</small>
+                </div>
+            )}
+            
+            {/* 消しゴムカーソル */}
+            {eraserMode && cursorPos && (
+                <div
+                    style={{
+                        position: "absolute",
+                        left: cursorPos.x,
+                        top: cursorPos.y,
+                        width: 120,
+                        height: 120,
+                        borderRadius: "50%",
+                        border: "3px dashed rgba(255, 100, 100, 0.8)",
+                        background: "rgba(255, 100, 100, 0.2)",
+                        transform: "translate(-50%, -50%)",
+                        pointerEvents: "none",
+                        zIndex: 10000,
+                    }}
+                />
+            )}
         </main>
     );
 }
