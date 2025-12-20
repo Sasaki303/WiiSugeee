@@ -59,6 +59,8 @@ export default function Home() {
         buttonHoverText: isDark ? "#000000" : "#000000",
         disconnectedText: isDark ? "#cacacaff" : "#454545ff",
         wiiRemoteImage: isDark ? "/phKuro 3.png" : "/phShiro 3.png",
+        lineBorder: "#87CEEB",
+        headerFooterBg: isDark ? "#333333" : "#F5F5F5",
     };
 
     // ボタンのベーススタイル（1〜4のボタンは統一サイズ）
@@ -104,7 +106,8 @@ export default function Home() {
                 justifyContent: "space-between",
                 alignItems: "flex-start",
                 padding: "20px 40px",
-                borderBottom: `2px solid ${colors.border}`,
+                borderBottom: `2px solid ${colors.lineBorder}`,
+                backgroundColor: colors.headerFooterBg,
             }}>
                 {/* 左側：タイトル */}
                 <h1 style={{
@@ -140,7 +143,7 @@ export default function Home() {
                             (e.currentTarget as HTMLAnchorElement).style.color = colors.text;
                         }}
                     >
-                        ⑤使い方
+                        📓使い方
                     </Link>
 
                 </div>
@@ -214,7 +217,8 @@ export default function Home() {
                 alignItems: "center",
                 justifyContent: "space-between",
                 padding: "20px 40px",
-                borderTop: `2px solid ${colors.border}`,
+                borderTop: `2px solid ${colors.lineBorder}`,
+                backgroundColor: colors.headerFooterBg,
                 maxHeight: "80px",
                 gap: "10px",
             }}>
