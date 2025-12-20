@@ -224,48 +224,22 @@ function playSoundOnWiiInternal(soundType: 'shot' | 'oh' | 'uxo') {
         packet[0] = 0x18;
         packet[1] = 0xA0;
 
-        const t0 = performance.now();
+        console.log(`Total chunks to send: ${totalChunks}, Duration: ${(totalChunks * chunkMs).toFixed(0)}ms`);
 
         const tick = () => {
             // currentDevice が途中で null になる可能性がある
             if (!currentDevice) {
+                console.log('Device disconnected during playback');
                 isPlayingAudio = false;
                 return;
             }
 
             if (chunkIndex >= totalChunks) {
+                console.log(`Playback complete. Sent ${chunkIndex} chunks`);
                 isPlayingAudio = false;
                 return;
             }
 
-            const now = performance.now();
-            const expected = Math.floor((now - t0) / chunkMs);
-
-            // ★遅れたらまとめ送りせずドロップして追いつく
-            if (expected > chunkIndex + 1) {
-                // まず無音を1パケット送って耳障りを減らす
-                for (let i = 0; i < chunkSize; i++) packet[2 + i] = 0;
-
-                const dev = currentDevice;
-                if (!dev) {
-                    isPlayingAudio = false;
-                    return;
-                }
-                try {
-                    dev.write(packet);
-                } catch (e) {
-                    console.error('Error sending audio packet:', e);
-                    isPlayingAudio = false;
-                    return;
-                }
-
-                // 追いつく（遅れ分は捨てる）
-                chunkIndex = expected;
-                if (chunkIndex >= totalChunks) {
-                    isPlayingAudio = false;
-                    return;
-                }
-            }
             const offset = chunkIndex * chunkSize;
 
             // 20バイト詰める（足りない分は0でパディング）
@@ -289,11 +263,8 @@ function playSoundOnWiiInternal(soundType: 'shot' | 'oh' | 'uxo') {
 
             chunkIndex++;
 
-            const nextAt = t0 + chunkIndex * chunkMs;
-            const delay = Math.max(0, nextAt - performance.now());
-            setTimeout(tick, delay);
-
-
+            // 次のチャンクを送信（固定間隔）
+            setTimeout(tick, chunkMs);
         };
 
         tick();
