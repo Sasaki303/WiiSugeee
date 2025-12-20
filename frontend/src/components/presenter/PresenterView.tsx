@@ -723,6 +723,9 @@ export function PresenterView() {
             {/* リアクション */}
             <ReactionOverlay emitClap={shouldEmitClap} emitLaugh={shouldEmitLaugh} />
 
+            {/* IRポインターオーバーレイ */}
+            <IrPointerOverlay wiiState={wiiState} isPlaying={isPlaying} />
+
             {/* スライド表示エリア (全画面・余白なし・アスペクト比維持) */}
             <SlideDisplay
                 currentNode={currentNode}
