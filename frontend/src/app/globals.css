@@ -53,7 +53,7 @@ a {
   text-decoration: none;
 }
 
-/* カスタムカーソル */
+/* カスタムカーソル（0.75倍サイズで統一） */
 html,
 body,
 #__next,
@@ -83,14 +83,17 @@ input[type='submit']:hover,
 input[type='reset']:hover,
 select:hover,
 label[for]:hover {
-  cursor: url("/PrecisionSelect.png") 32 32, pointer !important;
+  cursor: url("/PrecisionSelect.png") 24 24, pointer !important;
 }
 
 /* プレゼン画面でお絵描き中はペンカーソル */
+/* ペン先の座標を測定して設定してください */
+/* 例: ペン先が画像の(6, 28)にある場合 → 6 28 */
 .presenter-painting,
 .presenter-painting * {
-  cursor: url("/pen.png") 0 0, crosshair !important;
+  cursor: url("/pen.png") 6 28, crosshair !important;
 }
+
 
 @media (prefers-color-scheme: dark) {
   html {
