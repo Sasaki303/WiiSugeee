@@ -23,67 +23,17 @@ export function PresenterView() {
     const wasWiiADownRef = useRef(false);
 
     // Wiiリモコンの状態を取得
-	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt} = useWiiController();
+	const { wiiState, pressed, wiiConnected, wiiDisconnectedAt, playWiiSound } = useWiiController();
 
-    const soundboardRef = useRef<{ q?: HTMLAudioElement; w?: HTMLAudioElement; e?: HTMLAudioElement }>({});
-    const audioUnlockedRef = useRef(false);
-    const unlockRequestedRef = useRef(false);
-    const pendingSoundRef = useRef<"q" | "w" | "e" | null>(null);
-
-    const tryUnlockAudio = useCallback(async () => {
-        if (audioUnlockedRef.current) return;
-        if (!unlockRequestedRef.current) return;
-
-        const { q, w, e } = soundboardRef.current;
-        const audios = [q, w, e].filter(Boolean) as HTMLAudioElement[];
-        if (audios.length === 0) return;
-
-        // ユーザー操作の直後に play() してブラウザの自動再生制限を解除する
-        try {
-            const a = audios[0];
-            const prevMuted = a.muted;
-            const prevVolume = a.volume;
-            a.muted = true;
-            a.volume = 0;
-            await a.play();
-            a.pause();
-            a.currentTime = 0;
-            a.muted = prevMuted;
-            a.volume = prevVolume;
-            audioUnlockedRef.current = true;
-
-            const pending = pendingSoundRef.current;
-            pendingSoundRef.current = null;
-            if (pending) {
-                const next = soundboardRef.current[pending];
-                if (next) {
-                    next.currentTime = 0;
-                    void next.play().catch((err) => {
-                        console.warn("sound play failed", pending, err);
-                    });
-                }
-            }
-        } catch (err) {
-            // NotAllowedError の場合はユーザー操作がまだ不足している可能性があるので、そのまま待つ
-            console.warn("audio unlock failed", err);
-        }
-    }, []);
-
-    const playSound = useCallback((key: "q" | "w" | "e") => {
-        const a = soundboardRef.current[key];
-        if (!a) return;
-        if (!audioUnlockedRef.current) {
-            pendingSoundRef.current = key;
-            return;
-        }
-
-        a.currentTime = 0;
-        void a.play().catch((err) => {
-            // ユーザー操作が無い状態で呼ばれた場合など
-            pendingSoundRef.current = key;
-            console.warn("sound play failed", key, err);
-        });
-	}, []);
+	// PC側では鳴らさず、Wiiリモコン側のスピーカーで鳴らす
+	const playSound = useCallback(
+		(key: "q" | "w" | "e") => {
+			if (key === "q") playWiiSound("shot");
+			else if (key === "e") playWiiSound("oh");
+			else playWiiSound("uxo");
+		},
+		[playWiiSound],
+	);
 
     const returnTo = useMemo(() => {
         return searchParams.get("from") === "editor" ? "/editor" : "/";
@@ -107,46 +57,6 @@ export function PresenterView() {
 
     // ★修正: 常にplaying状態として扱う（flow/currentNodeIdがあれば再生中）
     const isPlaying = flow != null && currentNodeId != null;
-
-    useEffect(() => {
-		const q = new Audio("https://www.myinstants.com/media/sounds/nice-shot-wii-sports_DJJ0VOz.mp3");
-		const w = new Audio("https://www.myinstants.com/media/sounds/crowdaw.mp3");
-		const e = new Audio("https://www.myinstants.com/media/sounds/crowdoh.mp3");
-		q.preload = "auto";
-		w.preload = "auto";
-		e.preload = "auto";
-		soundboardRef.current = { q, w, e };
-        // すでにユーザー操作が発生していた場合に備えてアンロックを試行
-        void tryUnlockAudio();
-		return () => {
-			for (const a of [q, w, e]) {
-				try {
-					a.pause();
-				} catch {
-					// ignore
-				}
-			}
-			soundboardRef.current = {};
-		};
-    }, [tryUnlockAudio]);
-
-    // 初回ユーザー操作で音声をアンロック（Wii操作が先に来ても鳴らせるように）
-    useEffect(() => {
-        const onFirstUserGesture = () => {
-            unlockRequestedRef.current = true;
-            void tryUnlockAudio();
-        };
-
-        window.addEventListener("pointerdown", onFirstUserGesture, { once: true });
-        window.addEventListener("keydown", onFirstUserGesture, { once: true });
-        window.addEventListener("touchstart", onFirstUserGesture, { once: true });
-
-        return () => {
-            window.removeEventListener("pointerdown", onFirstUserGesture);
-            window.removeEventListener("keydown", onFirstUserGesture);
-            window.removeEventListener("touchstart", onFirstUserGesture);
-        };
-    }, [tryUnlockAudio]);
 
     // スペースキーでデバッグパネルの表示/非表示を切り替え
     useEffect(() => {
