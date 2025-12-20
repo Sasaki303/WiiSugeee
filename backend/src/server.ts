@@ -84,7 +84,7 @@ function initSpeaker() {
                 console.log('Setting sample rate to 2000Hz...');
                 currentDevice.write([
                     0x16, 0x04, 0xa2, 0x00, 0x01, 0x07,
-                    0x00, 0x40, 0x40, 0x1F, 0x60, 0x00, 0x00,
+                    0x00, 0x40, 0x70, 0x17, 0x50, 0x00, 0x00,
                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
                 ]);
 
@@ -109,7 +109,8 @@ function initSpeaker() {
 
 // 簡易的なビープ音を生成（8bit Signed PCM）
 function generateBeep(frequency: number, durationMs: number): Buffer {
-    const sampleRate = 3000;
+    // Wiiリモコン側のスピーカー設定に合わせる
+    const sampleRate = 2000;
     const samples = Math.floor((sampleRate * durationMs) / 1000);
     const buffer = Buffer.alloc(samples);
 
@@ -211,8 +212,9 @@ function playSoundOnWiiInternal(soundType: 'shot' | 'oh' | 'uxo') {
         isPlayingAudio = true;
 
         const chunkSize = 20;
-        const sampleRate = 3000; // ★スピーカー設定と一致
-        const chunkMs = (chunkSize / sampleRate) * 1000; // 10ms
+        // ★スピーカー設定（initSpeakerの0x1770=2000Hz）と一致させる
+        const sampleRate = 2000;
+        const chunkMs = (chunkSize / sampleRate) * 1000;
 
         const totalChunks = Math.ceil(dataToSend.length / chunkSize);
         let chunkIndex = 0;
