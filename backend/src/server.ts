@@ -185,6 +185,15 @@ function playSoundOnWii(soundType: 'shot' | 'oh' | 'uxo') {
 function playSoundOnWiiInternal(soundType: 'shot' | 'oh' | 'uxo') {
     if (!currentDevice) return;
 
+    // スピーカーが初期化されていない場合は初期化
+    if (!speakerInitialized) {
+        console.log('Speaker not initialized, initializing...');
+        initSpeaker();
+        // 初期化完了を待ってから再生
+        setTimeout(() => playSoundOnWiiInternal(soundType), 200);
+        return;
+    }
+
     try {
         console.log(`Generating audio data for: ${soundType}`);
 
@@ -209,8 +218,9 @@ function playSoundOnWiiInternal(soundType: 'shot' | 'oh' | 'uxo') {
 
         const chunkSize = 20;
         const sampleRate = 2000;
-        // バッファアンダーフロー防止のため、理論値に近い間隔で送信
-        const chunkMs = 8; // 理論10msだが、若干速めに送ってバッファを維持
+        // Wiiリモコンの実際のバッファ処理能力に合わせた送信間隔
+        // 実測値に基づき20msに設定（遅めに送ってバッファオーバーフローを防ぐ）
+        const chunkMs = 20;
 
         const totalChunks = Math.ceil(audioData.length / chunkSize);
         let chunkIndex = 0;
