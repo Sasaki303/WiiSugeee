@@ -14,7 +14,7 @@ except ImportError:
     sys.exit(1)
 
 def convert_wav_to_raw(input_file, output_file, duration_sec=None):
-    """WAVを8bit PCM 2kHz モノラル .rawに変換"""
+    """WAVを8bit PCM 2kHz モノラル .rawに変換（高品質処理）"""
     print(f"変換中: {input_file} -> {output_file}")
     
     # WAV読み込み
@@ -29,9 +29,15 @@ def convert_wav_to_raw(input_file, output_file, duration_sec=None):
     if len(audio.shape) == 2:
         audio = audio.mean(axis=1)
     
-    # float型の場合は整数に変換
+    # float64に変換（高精度処理）
     if audio.dtype.kind == 'f':
-        audio = (audio * 32767).astype(np.int16)
+        audio = audio.astype(np.float64)
+    else:
+        # 整数型の場合は正規化
+        audio = audio.astype(np.float64) / 32768.0
+    
+    # DCオフセット除去
+    audio = audio - np.mean(audio)
     
     # 時間制限
     if duration_sec:
@@ -41,36 +47,44 @@ def convert_wav_to_raw(input_file, output_file, duration_sec=None):
     # 2kHzにリサンプリング（Wiiリモコンの制限）
     target_rate = 2000
     
-    # エイリアシングノイズを防ぐためのアンチエイリアシングフィルタ
-    # ナイキスト周波数 (1000Hz) より十分下でカット
+    # アンチエイリアシングフィルタ（カイザー窓）
     nyquist = target_rate / 2
-    cutoff = 750  # 750Hz以下を通す（安全マージンを確保）
+    cutoff = 850  # 850Hz（ナイキストの85%で品質と安全性のバランス）
     
     # 正規化周波数
     w = cutoff / (sample_rate / 2)
     
-    # 6次バターワースフィルタ（エイリアシング防止を優先）
+    # カイザー窓FIRフィルタ（リニアフェーズで歪みなし）
     if w < 1.0:
-        b, a = signal.butter(6, w, 'low')
-        audio = signal.filtfilt(b, a, audio)
+        numtaps = 101  # フィルタ長
+        taps = signal.firwin(numtaps, cutoff, fs=sample_rate, window=('kaiser', 8.0))
+        audio = signal.filtfilt(taps, 1.0, audio)
     
     if sample_rate != target_rate:
-        # 高品質リサンプリング（まずダウンサンプル係数を計算）
+        # 高品質リサンプリング（window='kaiser'で最高品質）
         from math import gcd
         g = gcd(target_rate, sample_rate)
         up = target_rate // g
         down = sample_rate // g
-        audio = signal.resample_poly(audio, up, down)
+        audio = signal.resample_poly(audio, up, down, window=('kaiser', 8.0))
     
-    # 正規化して8bit符号付きPCMに変換 (-128 to 127)
-    audio = audio.astype(np.float32)
+    # ピーク正規化（-1.0 to 1.0）
     max_val = np.max(np.abs(audio))
     if max_val > 0:
-        # 音割れを完全に防ぐため控えめな振幅
-        audio = audio / max_val * 0.45  # 45%に抑える
+        audio = audio / max_val
     
-    # int8 (Signed) に変換
-    audio = (audio * 127).astype(np.int8)
+    # ソフトクリッピング（アナログ的な歪み低減）
+    audio = np.tanh(audio * 0.7) / np.tanh(0.7)
+    
+    # 最終振幅調整（音割れ防止）
+    audio = audio * 0.55
+    
+    # ディザリング追加（量子化ノイズをホワイトノイズに変換）
+    dither = np.random.triangular(-0.5/127, 0, 0.5/127, len(audio))
+    audio = audio + dither
+    
+    # int8 (Signed) に変換（クリッピング）
+    audio = np.clip(audio * 127, -128, 127).astype(np.int8)
     
     # rawファイルとして出力
     with open(output_file, 'wb') as f:
