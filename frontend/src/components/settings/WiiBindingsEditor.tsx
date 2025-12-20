@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { mergeBindings, type ButtonBindings, type SoundOutputDevice } from "@/lib/buttonBindings";
-import { getProjectBindings, setProjectBindings, getSoundSettings, setSoundSettings } from "@/lib/currentProjectStore";
+import { mergeBindings, type ButtonBindings } from "@/lib/buttonBindings";
+import { getProjectBindings, setProjectBindings } from "@/lib/currentProjectStore";
 
 type SlotId = "A" | "B" | "PLUS" | "MINUS" | "HOME" | "ONE" | "TWO" | "UP" | "DOWN" | "LEFT" | "RIGHT";
 type FuncId =
@@ -338,39 +338,23 @@ export function WiiBindingsEditor(props: { onBack?: () => void }) {
     const [bindings, setBindings] = useState<Bindings>(() => readStored());
     const [savedBindings, setSavedBindings] = useState<Bindings>(() => readStored());
 
-    // ★追加: 音声出力デバイスの設定
-    const [soundOutputDevice, setSoundOutputDevice] = useState<SoundOutputDevice>(() => {
-        return getSoundSettings().outputDevice;
-    });
-    const [savedSoundOutputDevice, setSavedSoundOutputDevice] = useState<SoundOutputDevice>(() => {
-        return getSoundSettings().outputDevice;
-    });
-
     const isDirty = useMemo(() => {
-        return JSON.stringify(bindings) !== JSON.stringify(savedBindings) || 
-               soundOutputDevice !== savedSoundOutputDevice;
-    }, [bindings, savedBindings, soundOutputDevice, savedSoundOutputDevice]);
+        return JSON.stringify(bindings) !== JSON.stringify(savedBindings);
+    }, [bindings, savedBindings]);
 
     const onSave = useCallback(() => {
         setProjectBindings(toButtonBindings(bindings)); // localStorageへ保存
-        setSoundSettings({ outputDevice: soundOutputDevice }); // ★追加: 音声設定も保存
         setSavedBindings(bindings);
-        setSavedSoundOutputDevice(soundOutputDevice);
-    }, [bindings, soundOutputDevice]);
+    }, [bindings]);
 
     const onResetToDefault = () => {
         setBindings(DEFAULT_BINDINGS);
-        setSoundOutputDevice("pc"); // ★追加: デフォルトはPC
     };
 
     const reloadFromStorage = () => {
         const next = readStored(); // localStorageから再読込
         setBindings(next);
         setSavedBindings(next);
-        // ★追加: 音声設定も再読込
-        const soundSettings = getSoundSettings();
-        setSoundOutputDevice(soundSettings.outputDevice);
-        setSavedSoundOutputDevice(soundSettings.outputDevice);
     };
 
     // --- ★追加: 戻る確認モーダル（3択） ---
@@ -419,14 +403,16 @@ export function WiiBindingsEditor(props: { onBack?: () => void }) {
 		const reactions: FuncId[] = ["CLAP", "SMILE"];
 		const branches: FuncId[] = [...funcs.filter(f => f.startsWith("CASE_"))];
 		const tools: FuncId[] = ["PAINT", "ERASER", "REMOVE"];
-		const sounds: FuncId[] = ["SHOT", "OH", "UXO"];
+		const soundsPC: FuncId[] = ["SHOT_PC", "OH_PC", "UXO_PC"];
+		const soundsWii: FuncId[] = ["SHOT_WII", "OH_WII", "UXO_WII"];
 		const others: FuncId[] = ["PLUS", "MINUS", "UP", "DOWN", "A", "B"];
 		return [
 			{ label: "ナビゲーション", funcs: navigation },
 			{ label: "リアクション", funcs: reactions },
 			{ label: "分岐", funcs: branches },
 			{ label: "ツール", funcs: tools },
-			{ label: "サウンド", funcs: sounds },
+			{ label: "サウンド (PC)", funcs: soundsPC },
+			{ label: "サウンド (Wii)", funcs: soundsWii },
 			{ label: "その他", funcs: others },
 		];
 	}, [funcs]);
@@ -647,70 +633,6 @@ export function WiiBindingsEditor(props: { onBack?: () => void }) {
 			</div>
 
 			{/* ★追加: 音声出力デバイス選択 */}
-			<div style={{ 
-				marginBottom: 12, 
-				padding: 8, 
-				borderRadius: 8, 
-				background: "#f9fafb",
-				border: "1px solid #e5e7eb" 
-			}}>
-				<div style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", marginBottom: 6 }}>
-					サウンド出力デバイス
-				</div>
-				<div style={{ display: "flex", gap: 8 }}>
-					<label style={{ 
-						flex: 1, 
-						display: "flex", 
-						alignItems: "center", 
-						gap: 6,
-						cursor: "pointer",
-						padding: "6px 10px",
-						borderRadius: 6,
-						background: soundOutputDevice === "pc" ? "#111827" : "#fff",
-						color: soundOutputDevice === "pc" ? "#fff" : "#111827",
-						border: "1px solid #111827",
-						fontSize: 12,
-						fontWeight: 600,
-						transition: "all 0.2s"
-					}}>
-						<input
-							type="radio"
-							name="soundOutputDevice"
-							value="pc"
-							checked={soundOutputDevice === "pc"}
-							onChange={() => setSoundOutputDevice("pc")}
-							style={{ margin: 0 }}
-						/>
-						<span>PC</span>
-					</label>
-					<label style={{ 
-						flex: 1, 
-						display: "flex", 
-						alignItems: "center", 
-						gap: 6,
-						cursor: "pointer",
-						padding: "6px 10px",
-						borderRadius: 6,
-						background: soundOutputDevice === "wii" ? "#111827" : "#fff",
-						color: soundOutputDevice === "wii" ? "#fff" : "#111827",
-						border: "1px solid #111827",
-						fontSize: 12,
-						fontWeight: 600,
-						transition: "all 0.2s"
-					}}>
-						<input
-							type="radio"
-							name="soundOutputDevice"
-							value="wii"
-							checked={soundOutputDevice === "wii"}
-							onChange={() => setSoundOutputDevice("wii")}
-							style={{ margin: 0 }}
-						/>
-						<span>Wiiリモコン</span>
-					</label>
-				</div>
-			</div>
-
 			<div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
 				<button
 					onClick={onSave}
