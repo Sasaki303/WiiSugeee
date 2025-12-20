@@ -54,39 +54,25 @@ export function WiiReconnectPopup({ isPlaying, wiiConnected, startedWithWii }: P
             aria-label="Wiiリモコンが接続されました"
             style={{
                 position: "absolute",
-                top: 80,
-                right: 20,
+                inset: 0,
                 zIndex: 30000,
-                width: "min(400px, 90vw)",
-                borderRadius: 14,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
                 background: "#FFFFFF",
                 border: "3px solid #87CEEB",
                 boxShadow: "0 10px 40px rgba(135, 206, 235, 0.4)",
-                padding: 20,
-                color: "#87CEEB",
+                padding: 40,
                 textAlign: "center",
-                animation: "slideInRight 0.3s ease-out",
             }}
         >
-            <div style={{ fontSize: 24, fontWeight: 400, marginBottom: 8, fontFamily: "Doto, sans-serif" }}>
-                Wii-Remote Conected!
+            <div style={{ fontSize: 60, fontWeight: 400, marginBottom: 30, color: "#87CEEB", fontFamily: "Doto, sans-serif" }}>
+                ✓ Wii-Remote Conected!
             </div>
-            <div style={{ fontSize: 14, opacity: 0.8, lineHeight: 1.5, color: "#000000" }}>
+            <div style={{ fontSize: 32, opacity: 0.8, lineHeight: 1.5, color: "#000000" }}>
                 操作を再開できます
             </div>
-
-            <style jsx>{`
-                @keyframes slideInRight {
-                    from {
-                        transform: translateX(100%);
-                        opacity: 0;
-                    }
-                    to {
-                        transform: translateX(0);
-                        opacity: 1;
-                    }
-                }
-            `}</style>
         </div>
     );
 }

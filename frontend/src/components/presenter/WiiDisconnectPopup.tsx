@@ -64,40 +64,41 @@ export function WiiDisconnectPopup({
                 position: "absolute",
                 inset: 0,
                 zIndex: 30000,
-                display: "grid",
-                placeItems: "center",
-                background: "rgba(0,0,0,0.75)",
-                color: "white",
-                padding: 24,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "#FFFFFF",
+                border: "3px solid #FF0000",
+                boxShadow: "0 20px 80px rgba(255, 0, 0, 0.3)",
+                padding: 40,
+                textAlign: "center",
             }}
             onClick={() => setOpen(false)}
         >
-            <div
-                style={{
-                    width: "min(720px, 92vw)",
-                    borderRadius: 14,
-                    background: "#FFFFFF",
-                    border: "3px solid #FF0000",
-                    boxShadow: "0 20px 80px rgba(255, 0, 0, 0.3)",
-                    padding: 24,
-                    textAlign: "center",
-                }}
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div style={{ fontSize: 30, fontWeight: 400, marginBottom: 10, color: "#FF0000", fontFamily: "Doto, sans-serif" }}>
-                    Wii-Remote Disconected…
-                </div>
-                <div style={{ fontSize: 16, opacity: 0.9, lineHeight: 1.6, color: "#000000" }}>
-                    接続（Bluetooth/電池）を確認してください。<br />
-                    キーボード操作（←/→）は引き続き利用できます。
-                </div>
-
-                <div style={{ marginTop: 16, display: "flex", justifyContent: "center", gap: 12 }}>
-                    <button onClick={() => setOpen(false)} style={{ padding: "10px 16px", fontSize: 16 }}>
-                        閉じる
-                    </button>
-                </div>
+            <div style={{ fontSize: 60, fontWeight: 400, marginBottom: 30, color: "#FF0000", fontFamily: "Doto, sans-serif" }}>
+                Wii-Remote Disconected…
             </div>
+            <div style={{ fontSize: 32, opacity: 0.9, lineHeight: 1.6, color: "#000000", marginBottom: 40 }}>
+                接続（Bluetooth/電池）を確認してください。<br />
+                キーボード操作（←/→）は引き続き利用できます。
+            </div>
+
+            <button 
+                onClick={() => setOpen(false)} 
+                style={{ 
+                    padding: "20px 40px", 
+                    fontSize: 24,
+                    border: "2px solid #FF0000",
+                    background: "#FFFFFF",
+                    color: "#FF0000",
+                    borderRadius: 30,
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                }}
+            >
+                閉じる
+            </button>
         </div>
     );
 }
