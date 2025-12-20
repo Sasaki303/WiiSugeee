@@ -1,5 +1,6 @@
 import type { SerializedFlow } from "@/lib/presentation";
-import type { ButtonBindings } from "@/lib/buttonBindings";
+import type { ButtonBindings, SoundSettings } from "@/lib/buttonBindings";
+import { DEFAULT_SOUND_SETTINGS } from "@/lib/buttonBindings";
 import { loadProjectBindings, saveProjectBindings } from "@/lib/projectBindingsStorage";
 
 type Listener = () => void;
@@ -53,5 +54,36 @@ export function setProjectBindings(bindings: ButtonBindings) {
         saveProjectBindings(currentProjectId, bindings);
     }
 
+    for (const l of listeners) l();
+}
+
+// 音声設定の保存・読み込み
+const SOUND_SETTINGS_KEY_PREFIX = "wiiSugeee_soundSettings_";
+
+export function getSoundSettings(): SoundSettings {
+    if (typeof window === "undefined") {
+        return { ...DEFAULT_SOUND_SETTINGS } as SoundSettings;
+    }
+    
+    const key = SOUND_SETTINGS_KEY_PREFIX + currentProjectId;
+    const stored = localStorage.getItem(key);
+    
+    if (!stored) {
+        return { ...DEFAULT_SOUND_SETTINGS } as SoundSettings;
+    }
+    
+    try {
+        return JSON.parse(stored) as SoundSettings;
+    } catch {
+        return { ...DEFAULT_SOUND_SETTINGS } as SoundSettings;
+    }
+}
+
+export function setSoundSettings(settings: SoundSettings) {
+    if (typeof window === "undefined") return;
+    
+    const key = SOUND_SETTINGS_KEY_PREFIX + currentProjectId;
+    localStorage.setItem(key, JSON.stringify(settings));
+    
     for (const l of listeners) l();
 }

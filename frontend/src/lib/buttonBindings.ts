@@ -11,10 +11,21 @@ export type BindingAction =
 	| { type: "reaction"; kind: "clap" | "laugh" }
 	| { type: "paint" }
 	| { type: "eraser" }
-	| { type: "sound"; kind: "shot" | "oh" | "uxo" }
+	| { type: "sound"; kind: "shot" | "oh" | "uxo"; outputDevice: "pc" | "wii" }
 	| { type: "remove" };
 
 export type ButtonBindings = Partial<Record<WiiButton, BindingAction>>;
+
+// 音声出力デバイスの設定
+export type SoundOutputDevice = "pc" | "wii";
+
+export interface SoundSettings {
+	outputDevice: SoundOutputDevice;
+}
+
+export const DEFAULT_SOUND_SETTINGS: SoundSettings = {
+	outputDevice: "pc",
+};
 
 export const DEFAULT_BINDINGS: ButtonBindings = {
 	Right: { type: "next" },
@@ -51,15 +62,17 @@ export function formatAction(a: BindingAction): string {
 			return "PAINT🎨";
 		case "eraser":
 			return "ERASER";
-		case "sound":
+		case "sound": {
+			const device = a.outputDevice === "wii" ? "[Wii]" : "[PC]";
 			switch (a.kind) {
 				case "shot":
-					return "SHOT🔊";
+					return `SHOT🔊${device}`;
 				case "oh":
-					return "Oh...🔊";
+					return `Oh...🔊${device}`;
 				case "uxo":
-					return "Uxo~🔊";
+					return `Uxo~🔊${device}`;
 			}
+		}
 		case "remove":
 			return "REMOVE";
 	}

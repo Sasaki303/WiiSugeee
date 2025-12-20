@@ -86,6 +86,9 @@ export function useWiiController() {
 
 	// ★追加: 「一度でも正常に接続できていたか」を保持（接続失敗の誤爆防止）
 	const wasConnectedRef = useRef(false);
+	
+	// ★追加: WebSocket接続を保持
+	const wsRef = useRef<WebSocket | null>(null);
 
 	// 「このフレームで押された」情報（Wii + キーボード合成）
 	const [pressed, setPressed] = useState<Partial<WiiState["buttons"]>>({});
@@ -131,6 +134,7 @@ export function useWiiController() {
 	// WebSocket (Wii)
 	useEffect(() => {
 		const ws = new WebSocket("ws://localhost:8080");
+		wsRef.current = ws; // ★追加: WebSocketを保持
 
 		ws.onopen = () => {
 			console.log("Connected to Wii Server");
@@ -210,6 +214,7 @@ export function useWiiController() {
 			try {
 				ws.close();
 			} catch {}
+			wsRef.current = null; // ★追加: WebSocketをクリア
 		};
 
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -266,11 +271,26 @@ export function useWiiController() {
 		setWiiState(mergedState);
 		setPressed(mergedPressed);
 	};
+	
+	// ★追加: Wiiリモコンで音を鳴らす関数
+	const playWiiSound = (soundType: 'shot' | 'oh' | 'uxo') => {
+		if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+			console.warn('Cannot play sound: WebSocket not connected');
+			return;
+		}
+		
+		try {
+			wsRef.current.send(JSON.stringify({ type: 'playSound', soundType }));
+		} catch (err) {
+			console.error('Failed to send playSound message:', err);
+		}
+	};
 
 	return {
 		wiiState,
 		pressed,
 		wiiConnected,
 		wiiDisconnectedAt,
+		playWiiSound, // ★追加
 	};
 }
